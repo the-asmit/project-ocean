@@ -41,3 +41,31 @@ export function clipYForIndex(dataset, stops, index) {
 export function stopAt(stops, index) {
   return index <= 0 ? null : stops[Math.min(stops.length - 1, index - 1)]
 }
+
+// --- the west-east cut ---------------------------------------------------
+// Same idea one axis over: the horizontal slice snaps to the model's real
+// depth levels, so the vertical slice snaps to the model's real longitude
+// columns. Every position is a column the field actually carries.
+//
+// Stops stop short of the far wall — a cut that consumed the whole tile would
+// leave no block and no cross-section to read.
+const MIN_KEEP = 0.12          // fraction of the tile that must survive the cut
+
+export function westStops(dataset) {
+  const { W } = dataset.meta.volume
+  const { lonMin, lonMax } = dataset.map
+  const usable = Math.floor(W * (1 - MIN_KEEP))
+  const out = []
+  for (let i = 1; i <= usable; i++) {
+    const lon = lonMin + (i / (W - 1)) * (lonMax - lonMin)
+    out.push({ lon, col: i, frac: i / (W - 1) })
+  }
+  return out
+}
+
+// Slider index (0 = no cut) -> world units removed from the block's west side.
+export function westCutForIndex(dataset, stops, index) {
+  if (index <= 0) return 0
+  const s = stops[Math.min(stops.length - 1, index - 1)]
+  return s.frac * dataset.map.spanX
+}

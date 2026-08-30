@@ -17,6 +17,7 @@ import { useVisualizationState } from './state/useVisualizationState.js'
 function SourceNote({ dataset }) {
   const showDetail = useVisualizationState((s) => s.showDetail)
   const clipIndex = useVisualizationState((s) => s.clipIndex)
+  const westIndex = useVisualizationState((s) => s.westIndex)
   const v = dataset.meta.volume
   const curve = dataset.meta.bathymetry.depthCurve
   // Slicing replaces the stylized top face with a real horizontal section, so
@@ -24,6 +25,11 @@ function SourceNote({ dataset }) {
   // cut. Disclosing something that isn't on screen is as wrong as failing to
   // disclose something that is.
   const sliced = clipIndex > 0
+  const westSliced = westIndex > 0
+  const cutNames = [
+    sliced && 'top face',
+    westSliced && 'west face',
+  ].filter(Boolean).join(' and ')
   return (
     <>
       <span className="src">
@@ -31,8 +37,9 @@ function SourceNote({ dataset }) {
       </span>
       <span className="dot">·</span>
       <span className={showDetail && !sliced ? 'synth' : undefined}>
-        {sliced
-          ? 'Sliced — top face is a REAL horizontal section, stylized surface removed'
+        {sliced || westSliced
+          ? `Sliced — ${cutNames} ${sliced && westSliced ? 'are' : 'is'} a REAL section through the field`
+            + (sliced ? ', stylized surface removed' : '')
           : showDetail
             ? 'Block top face is STYLIZED shading, not imagery — cut faces are real data'
             : 'Stylized top face OFF — every rendered face is data'}

@@ -14,7 +14,7 @@ export const useVisualizationState = create((set) => ({
   // an index from the old one would point at a different depth in the new one.
   setRegion: (region) =>
     set({ region, selected: null, hover: null, depthClip: 0, clipIndex: 0,
-         }),
+         westIndex: 0 }),
 
   // True while a tile is being fetched/derived. The previously loaded dataset
   // stays on screen underneath — a frozen block with no feedback is worse than
@@ -35,6 +35,12 @@ export const useVisualizationState = create((set) => ({
   // float back through the depth curve to work out which level we are on.
   clipIndex: 0,             // 0 = no slice, else 1-based index into sliceStops
   sliceExtended: false,     // allow slicing below the variable's depth extent
+  // The west-east cut, independent of the depth cut: each removes its own part
+  // of whatever geometry the other has left.
+  westIndex: 0,             // 0 = no cut, else 1-based index into westStops
+  // Shared because the expanded 3D view covers the right rail and has to mount
+  // its own copy of the section controls; both need to know which is on screen.
+  sceneExpanded: false,
   density: 0.022,           // Beer-Lambert extinction per world unit
   // The diorama needs real vertical presence (at 1x a 600 km x 3.5 km tile is a
   // pancake) without becoming a cube. 8x reads as a wide slab and still leaves
@@ -45,6 +51,8 @@ export const useVisualizationState = create((set) => ({
   setDepthClip: (depthClip) => set({ depthClip }),
   setSlice: (clipIndex, depthClip) => set({ clipIndex, depthClip }),
   setSliceExtended: (sliceExtended) => set({ sliceExtended }),
+  setWestIndex: (westIndex) => set({ westIndex }),
+  setSceneExpanded: (sceneExpanded) => set({ sceneExpanded }),
   setDensity: (density) => set({ density }),
   setVertExag: (vertExag) => set({ vertExag }),
   setShowDetail: (showDetail) => set({ showDetail }),

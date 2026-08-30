@@ -58,8 +58,11 @@ export const KIND = { SHELL: 0, CUT: 1, TOP: 2, BOTTOM: 3 }
 
 // w, d      footprint spans — aspect-correct, from the region's lat/lon extent
 // topY, botY  the DATA box in world Y; the cut faces span exactly this range
-export function ruggedChunk(w, d, topY, botY, seed = 0) {
+export function ruggedChunk(w, d, topY, botY, seed = 0, westCut = 0) {
   const hx = w / 2, hz = d / 2
+  const xW = -hx + westCut          // west boundary; -hx when nothing is cut
+  const sliced = westCut > 1e-6
+  const kept = hx - xW              // surviving width
   const height = topY - botY
   const amp = Math.min(w, d) * 0.18          // horizontal tear amplitude
   const drop = height * 0.17                 // how far the torn base hangs
@@ -94,24 +97,41 @@ export function ruggedChunk(w, d, topY, botY, seed = 0) {
     }
   }
 
-  // ---- the two knife cuts: plain planar quads on the data box boundary ----
-  quad([-hx, botY, hz], [hx, botY, hz], [hx, topY, hz], [-hx, topY, hz],
+  // ---- the knife cuts: plain planar quads on the data box boundary --------
+  quad([xW, botY, hz], [hx, botY, hz], [hx, topY, hz], [xW, topY, hz],
     [0, 0, 1], KIND.CUT)
   quad([hx, botY, hz], [hx, botY, -hz], [hx, topY, -hz], [hx, topY, hz],
     [1, 0, 0], KIND.CUT)
+  if (sliced) {
+    // The face the west slice just exposed. A CUT face like the other two, so
+    // the shader textures it from the real field with no special case.
+    quad([xW, botY, -hz], [xW, botY, hz], [xW, topY, hz], [xW, topY, -hz],
+      [-1, 0, 0], KIND.CUT)
+  }
 
-  // ---- the torn perimeter: D -> C -> B (the -Z side, then the -X side) ----
+  // ---- the torn perimeter -------------------------------------------------
   // Ring order around the top face is B, A, D, C — the same +Y winding a plain
-  // top quad has — so the torn run is the D -> C -> B half of it.
+  // top quad has — so the torn run is the D -> C -> B half of it. Once the west
+  // slice bites in, the whole -X torn side is gone and only the -Z run remains,
+  // welded flat at BOTH ends (to the +X cut and to the new west cut).
   const SEG = 34
   const ring = []
   const push = (x, z, t) => ring.push({ x, z, t })
 
-  push(hx, -hz, 0)                              // D — welded to the x=+hx cut
-  for (let i = 1; i < SEG; i++) push(hx - w * (i / SEG), -hz, i / SEG)
-  push(-hx, -hz, 1)                             // C — the free corner
-  for (let i = 1; i < SEG; i++) push(-hx, -hz + d * (i / SEG), 1 - i / SEG)
-  push(-hx, hz, 0)                              // B — welded to the z=+hz cut
+  if (sliced) {
+    push(hx, -hz, 0)                            // welded to the x=+hx cut
+    for (let i = 1; i < SEG; i++) {
+      const s = i / SEG
+      push(hx - kept * s, -hz, Math.min(s, 1 - s) * 2)
+    }
+    push(xW, -hz, 0)                            // welded to the new west cut
+  } else {
+    push(hx, -hz, 0)                            // D — welded to the x=+hx cut
+    for (let i = 1; i < SEG; i++) push(hx - w * (i / SEG), -hz, i / SEG)
+    push(-hx, -hz, 1)                           // C — the free corner
+    for (let i = 1; i < SEG; i++) push(-hx, -hz + d * (i / SEG), 1 - i / SEG)
+    push(-hx, hz, 0)                            // B — welded to the z=+hz cut
+  }
 
   // arc length, so the noise runs continuously around the C corner
   let arc = 0
@@ -172,17 +192,17 @@ export function ruggedChunk(w, d, topY, botY, seed = 0) {
   }
 
   // ---- top face: perfectly flat at topY, with an irregular OUTLINE --------
-  const topRing = [[-hx, topY, hz], [hx, topY, hz]]
+  const topRing = [[xW, topY, hz], [hx, topY, hz]]
   for (let i = 0; i < ring.length; i++) topRing.push(layer[0][i])
   for (let i = 0; i < topRing.length; i++) {
-    tri([0, topY, 0], topRing[i], topRing[(i + 1) % topRing.length],
+    tri([(xW + hx) / 2, topY, 0], topRing[i], topRing[(i + 1) % topRing.length],
       [0, 1, 0], KIND.TOP)
   }
 
   // ---- base: torn, hanging below the cut faces' straight bottom edge ------
-  const botRing = [[-hx, botY, hz], [hx, botY, hz]]
+  const botRing = [[xW, botY, hz], [hx, botY, hz]]
   for (let i = 0; i < ring.length; i++) botRing.push(layer[ROWS][i])
-  const bc = [0, botY - drop * 0.85, 0]
+  const bc = [(xW + hx) / 2, botY - drop * 0.85, 0]
   for (let i = 0; i < botRing.length; i++) {
     geoTri(bc, botRing[(i + 1) % botRing.length], botRing[i],
       [0, -1, 0], KIND.BOTTOM)
@@ -200,15 +220,23 @@ export function ruggedChunk(w, d, topY, botY, seed = 0) {
 
 // The knife edges, drawn crisply so the cut reads as deliberate against the
 // torn shell — the whole point of the sliced-tennis-ball silhouette.
-export function cutOutline(w, d, topY, botY) {
+export function cutOutline(w, d, topY, botY, westCut = 0) {
   const hx = w / 2, hz = d / 2
+  // Follow the west cut, or the outline keeps drawing the knife edges where the
+  // block used to be and they hang in empty space beside it.
+  const xW = -hx + westCut
   const p = []
   const seg = (a, b) => p.push(...a, ...b)
-  const A = [hx, topY, hz], B = [-hx, topY, hz], D = [hx, topY, -hz]
-  const Ab = [hx, botY, hz], Bb = [-hx, botY, hz], Db = [hx, botY, -hz]
+  const A = [hx, topY, hz], B = [xW, topY, hz], D = [hx, topY, -hz]
+  const Ab = [hx, botY, hz], Bb = [xW, botY, hz], Db = [hx, botY, -hz]
   seg(B, A); seg(A, D)
   seg(Bb, Ab); seg(Ab, Db)
   seg(A, Ab); seg(B, Bb); seg(D, Db)
+  if (westCut > 1e-6) {
+    // the west cut's own perimeter, so the new face reads as deliberate
+    const C = [xW, topY, -hz], Cb = [xW, botY, -hz]
+    seg(B, C); seg(Bb, Cb); seg(C, Cb)
+  }
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3))
   return g

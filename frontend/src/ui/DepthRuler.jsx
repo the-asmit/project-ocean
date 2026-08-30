@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { blockLayout } from '../scene/blockLayout.js'
+import { westStops, westCutForIndex } from '../scene/sliceStops.js'
 
 // Depth ruler along the block's nearest right-hand vertical edge, drawn as a
 // DOM/SVG overlay rather than in-scene text so the labels stay crisp at any
@@ -15,6 +16,7 @@ const MIN_GAP = 13        // px between labels; the depth curve crowds the deep 
 export default function DepthRuler({ cameraRef, hostRef, dataset }) {
   const vertExag = useVisualizationState((s) => s.vertExag)
   const depthClip = useVisualizationState((s) => s.depthClip)
+  const westIndex = useVisualizationState((s) => s.westIndex)
   const [, force] = useState(0)
   const raf = useRef(0)
   const v = useRef(new THREE.Vector3())
@@ -36,8 +38,9 @@ export default function DepthRuler({ cameraRef, hostRef, dataset }) {
   const h = host.clientHeight
   const { bathyMaxM } = dataset.meta.bathymetry
   const maxDataM = dataset.meta.volume.maxDepthM
-  const L = blockLayout(dataset, vertExag, depthClip)
-  const { halfX, halfZ } = L
+  const westCut = westCutForIndex(dataset, westStops(dataset), westIndex)
+  const L = blockLayout(dataset, vertExag, depthClip, westCut)
+  const { halfX, halfZ, xWest } = L
 
   const project = (x, y, z) => {
     v.current.set(x, y, z).project(camera)
@@ -52,7 +55,7 @@ export default function DepthRuler({ cameraRef, hostRef, dataset }) {
   // are the edges that actually run the full 0 -> deepest span. The torn shell
   // has no straight edge to rule against, and hanging ticks off it would put
   // the scale beside geometry that isn't the section.
-  const corners = [[halfX, halfZ], [-halfX, halfZ], [halfX, -halfZ]]
+  const corners = [[halfX, halfZ], [xWest, halfZ], [halfX, -halfZ]]
   const centre = project(0, L.wallTop, 0)
   const scored = corners
     .map(([x, z]) => {

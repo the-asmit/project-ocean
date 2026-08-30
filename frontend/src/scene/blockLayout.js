@@ -14,7 +14,10 @@
 //        y = boxMinY      └───────────────┘ deepest sounding
 //                          ~~~ torn base hangs below ~~~
 //
-export function blockLayout(dataset, vertExag, depthClip) {
+// `westCut` is world units removed from the block's west (-X) side, the exact
+// counterpart of depthClip removing units from the top. Callers that do not
+// care about the horizontal cut can omit it and get the full footprint.
+export function blockLayout(dataset, vertExag, depthClip, westCut = 0) {
   const { boxDepth } = dataset.meta.bathymetry
   const { spanX, spanZ, depthToY, yToDepth } = {
     ...dataset.map,
@@ -40,6 +43,9 @@ export function blockLayout(dataset, vertExag, depthClip) {
 
   return {
     spanX, spanZ, halfX: spanX / 2, halfZ: spanZ / 2,
+    // west face after the cut; equals -halfX when nothing is sliced away
+    westCut,
+    xWest: -spanX / 2 + westCut,
     d, chamfer, clipNorm,
     boxMinY, boxMaxY, wallTop, geomTop, geomBot, height,
     centerY: (geomTop + geomBot) / 2,

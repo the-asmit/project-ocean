@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import Panel, { IconButton } from './Panel.jsx'
 import OceanScene from '../scene/OceanScene.jsx'
 import HUDLabel from '../interaction/HUDLabel.jsx'
 import DepthRuler from './DepthRuler.jsx'
+import SectionControls from './SectionControls.jsx'
 import SectionBadge from './SectionBadge.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { IconExpand, IconCollapse, IconHome } from './icons.jsx'
@@ -11,7 +12,8 @@ import { IconExpand, IconCollapse, IconHome } from './icons.jsx'
 // panel instead of the window now, and R3F picks up the resize itself.
 export default function ScenePanel({ dataset, cameraRef }) {
   const hostRef = useRef()
-  const [expanded, setExpanded] = useState(false)
+  const expanded = useVisualizationState((s) => s.sceneExpanded)
+  const setExpanded = useVisualizationState((s) => s.setSceneExpanded)
   const goHome = useVisualizationState((s) => s.goHome)
   const loading = useVisualizationState((s) => s.loading)
   const loadError = useVisualizationState((s) => s.loadError)
@@ -26,7 +28,7 @@ export default function ScenePanel({ dataset, cameraRef }) {
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [expanded])
+  }, [expanded, setExpanded])
 
   return (
     <Panel
@@ -42,7 +44,7 @@ export default function ScenePanel({ dataset, cameraRef }) {
           <IconButton
             label={expanded ? 'Exit full view (Esc)' : 'Full view'}
             active={expanded}
-            onClick={() => setExpanded((e) => !e)}
+            onClick={() => setExpanded(!expanded)}
           >
             {expanded ? <IconCollapse size={13} /> : <IconExpand size={13} />}
           </IconButton>
@@ -54,6 +56,15 @@ export default function ScenePanel({ dataset, cameraRef }) {
         <HUDLabel cameraRef={cameraRef} hostRef={hostRef} />
         <DepthRuler cameraRef={cameraRef} hostRef={hostRef} dataset={dataset} />
         <SectionBadge dataset={dataset} />
+
+        {/* Expanded covers the right rail, so the section controls come with
+            it. Same component the rail renders — one definition of the slice
+            logic, one store. The rail unmounts its copy while this is up. */}
+        {expanded && (
+          <div className="scene-controls">
+            <SectionControls dataset={dataset} compact />
+          </div>
+        )}
 
         {loading && (
           <div className="scene-busy">

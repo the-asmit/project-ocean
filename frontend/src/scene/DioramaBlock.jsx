@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { blockLayout } from './blockLayout.js'
+import { westStops, westCutForIndex } from './sliceStops.js'
 import { ruggedChunk, cutOutline } from './chunkGeometry.js'
 
 // ===========================================================================
@@ -368,8 +369,12 @@ export default function DioramaBlock({ dataset, meshRef }) {
   const vertExag = useVisualizationState((s) => s.vertExag)
   const showContours = useVisualizationState((s) => s.showContours)
   const showDetail = useVisualizationState((s) => s.showDetail)
+  const westIndex = useVisualizationState((s) => s.westIndex)
 
-  const L = blockLayout(dataset, vertExag, depthClip)
+  // The two cuts are independent: depthClip takes the top off, westCut takes
+  // the west side off, and each removes its own part of what the other left.
+  const westCut = westCutForIndex(dataset, westStops(dataset), westIndex)
+  const L = blockLayout(dataset, vertExag, depthClip, westCut)
   const { spanX, spanZ, halfX, halfZ } = L
   const tileKey = `${dataset.meta.region}|${dataset.meta.date}|${dataset.meta.volume.variable}`
   // Every region gets its own tear pattern, and the same region always gets the
@@ -428,12 +433,12 @@ export default function DioramaBlock({ dataset, meshRef }) {
   // group re-centres it — so the cut planes land exactly on the data box and
   // the depth ruler's ticks line up with the section they label.
   const geom = useMemo(
-    () => ruggedChunk(spanX, spanZ, L.wallTop - L.centerY, L.geomBot - L.centerY, seed),
-    [spanX, spanZ, L.wallTop, L.geomBot, L.centerY, seed],
+    () => ruggedChunk(spanX, spanZ, L.wallTop - L.centerY, L.geomBot - L.centerY, seed, L.westCut),
+    [spanX, spanZ, L.wallTop, L.geomBot, L.centerY, seed, L.westCut],
   )
   const edges = useMemo(
-    () => cutOutline(spanX, spanZ, L.wallTop - L.centerY, L.geomBot - L.centerY),
-    [spanX, spanZ, L.wallTop, L.geomBot, L.centerY],
+    () => cutOutline(spanX, spanZ, L.wallTop - L.centerY, L.geomBot - L.centerY, L.westCut),
+    [spanX, spanZ, L.wallTop, L.geomBot, L.centerY, L.westCut],
   )
   useEffect(() => () => { geom.dispose(); edges.dispose() }, [geom, edges])
 
