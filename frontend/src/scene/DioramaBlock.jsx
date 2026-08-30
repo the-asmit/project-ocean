@@ -1,15 +1,21 @@
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
+import { blockLayout } from './blockLayout.js'
+import { ruggedChunk, cutOutline } from './chunkGeometry.js'
 
 // ===========================================================================
-// Bounded diorama block — a finite display object, not an infinite fog volume.
+// Bounded diorama chunk — a finite display object, not an infinite fog volume.
 //
-// One opaque box. The fragment shader branches on the face normal:
-//   * side walls  -> vertical cross-section through the REAL field
+// A rugged, torn chunk of seafloor sliced clean through by two knife planes,
+// the way a cut tennis ball shows a smooth face against a fuzzy exterior. The
+// fragment shader branches on a per-face KIND attribute rather than the normal,
+// because the torn shell's normals point everywhere:
+//   * cut faces   -> vertical cross-section through the REAL field
 //   * top face    -> stylized sea surface / terrain, OR the horizontal section
-//                    once the depth-clip has sliced the block down
-//   * bottom face -> abyss rock
+//                    once the depth-clip has sliced the chunk down
+//   * torn shell  -> broken rock; carries no data and reports none
+//   * base        -> abyss rock
 //
 // The data path is the proven one, carried over from VolumeRaymarch verbatim:
 // the 128-entry DEPTH LUT for non-uniform GLORYS levels, the RG8 VALIDITY
@@ -26,22 +32,26 @@ import { useVisualizationState } from '../state/useVisualizationState.js'
 
 const LUT_N = 128
 
+
 const vertexShader = /* glsl */ `
 precision highp float;
 
 in vec3 position;
 in vec3 normal;
+in float aKind;                   // 0 shell, 1 cut face, 2 top, 3 base
 uniform mat4 modelMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 projectionMatrix;
 
 out vec3 vWorldPos;
 out vec3 vNormal;
+flat out float vKind;             // flat: a face is one kind, never a blend
 
 void main() {
   vec4 world = modelMatrix * vec4(position, 1.0);
   vWorldPos = world.xyz;
-  vNormal = normal;                 // box is axis-aligned and unrotated
+  vNormal = normal;                 // chunk is axis-aligned and unrotated
+  vKind = aKind;
   gl_Position = projectionMatrix * viewMatrix * world;
 }
 `
@@ -54,6 +64,7 @@ precision highp sampler3D;
 
 in vec3 vWorldPos;
 in vec3 vNormal;
+flat in float vKind;
 out vec4 outColor;
 
 uniform vec3 cameraPosition;
@@ -64,7 +75,9 @@ uniform sampler2D uHeightMap;  // R8, 0..1 normalised seafloor height
 uniform vec3 uBoxMin;          // ALWAYS the full block, even when clipped
 uniform vec3 uBoxMax;
 uniform vec2 uFloorRange;
-uniform float uClipY;
+uniform float uSliced;
+uniform float uClipNorm;
+uniform float uWallTop;
 uniform float uSat;
 uniform float uContour;
 uniform float uContourStep;
@@ -123,13 +136,13 @@ float fieldRow(float depthFrac) {
 }
 
 // --- the cross-section: what a cut through the block actually shows -------
-vec3 sectionColor(vec3 p, vec3 uvw01, float floorY) {
+vec3 sectionColor(vec2 hxz, float depthFrac, float effY, float floorY) {
   // below the real seafloor: block body, not water. Mottled so the rock reads
   // as material rather than as a flat fill — decorative, and off the ramp.
-  if (p.y < floorY) {
-    float t = clamp((floorY - p.y) / max(0.001, floorY - uBoxMin.y), 0.0, 1.0);
+  if (effY < floorY) {
+    float t = clamp((floorY - effY) / max(0.001, floorY - uBoxMin.y), 0.0, 1.0);
     vec3 rock = mix(vec3(0.341, 0.357, 0.400), vec3(0.153, 0.165, 0.196), t);
-    vec2 rq = vec2((uvw01.x + uvw01.z) * 3.4, uvw01.y);
+    vec2 rq = vec2((hxz.x + hxz.y) * 3.4, 1.0 - depthFrac);
     float strata = fbm(rq * vec2(2.4, 30.0));            // bedding planes
     float mottle = fbm(rq * vec2(9.0, 7.0));             // broad relief
     float fine = fbm(rq * vec2(26.0, 60.0));             // grain
@@ -137,8 +150,7 @@ vec3 sectionColor(vec3 p, vec3 uvw01, float floorY) {
     return rock;
   }
 
-  float depthFrac = clamp(1.0 - uvw01.y, 0.0, 1.0);
-  vec2 s = texture(uField, vec3(uvw01.x, fieldRow(depthFrac), uvw01.z)).rg;
+  vec2 s = texture(uField, vec3(hxz.x, fieldRow(depthFrac), hxz.y)).rg;
 
   // water the model carries no value for (below the field's depth extent).
   // Deliberately OFF the temperature ramp so it can never read as a value, and
@@ -233,6 +245,33 @@ vec3 topSurface(vec3 p, vec3 uvw01, out vec3 outNormal) {
   return c;
 }
 
+// --- the torn outer shell: broken rock, never data -----------------------
+// Deliberately drab and desaturated so it can never be confused with the
+// temperature ramp two faces away — the cut is what carries meaning here.
+vec3 shellRock(vec3 p, vec3 n, out vec3 outNormal) {
+  // triplanar-ish: drive the strata off world height, the mottle off the face
+  vec2 q = abs(n.x) > abs(n.z) ? p.zy : p.xy;
+  float strata = fbm(vec2(q.x * 0.05, q.y * 0.62));
+  float mottle = fbm(q * 0.085);
+  float grain  = fbm(q * 0.34);
+
+  vec3 warmRock = vec3(0.404, 0.353, 0.302);
+  vec3 coolRock = vec3(0.239, 0.255, 0.290);
+  vec3 c = mix(coolRock, warmRock, smoothstep(0.26, 0.76, mottle));
+  c *= 0.62 + 0.52 * mottle + 0.34 * strata + 0.18 * grain;
+
+  // fractured relief: perturb the normal off the same field so the shell
+  // catches light unevenly instead of reading as one tilted plane
+  float e = 1.4;
+  float h0 = mottle * 0.7 + grain * 0.3;
+  float hu = fbm((q + vec2(e, 0.0)) * 0.085) * 0.7 + fbm((q + vec2(e, 0.0)) * 0.34) * 0.3 - h0;
+  float hv = fbm((q + vec2(0.0, e)) * 0.085) * 0.7 + fbm((q + vec2(0.0, e)) * 0.34) * 0.3 - h0;
+  vec3 t1 = normalize(abs(n.y) > 0.9 ? vec3(1, 0, 0) : cross(vec3(0, 1, 0), n));
+  vec3 t2 = cross(n, t1);
+  outNormal = normalize(n - t1 * hu * 5.5 - t2 * hv * 5.5);
+  return c;
+}
+
 void main() {
   vec3 n = normalize(vNormal);
   vec3 p = vWorldPos;
@@ -242,38 +281,51 @@ void main() {
   vec2 huv = clamp((p.xz - uBoxMin.xz) / span.xz, 0.002, 0.998);
   float floorY = mix(uFloorRange.x, uFloorRange.y, texture(uHeightMap, huv).r);
 
-  bool sliced = uClipY < -0.01;
-  bool isTop = n.y > 0.5;
-  bool isBottom = n.y < -0.5;
+  int kind = int(vKind + 0.5);
+  bool isTop = kind == 2;
+  bool isCut = kind == 1;
+  bool isBottom = kind == 3;
+  bool isShell = kind == 0;
 
   vec3 base;
-  vec3 shadeN = n;          // normal used for lighting; the top face perturbs it
+  vec3 shadeN = n;          // normal used for lighting; textures perturb it
   float specAmount = 0.0;
 
-  if (isTop && !sliced && uStylizedTop > 0.5) {
-    base = topSurface(p, uvw01, shadeN);
-    specAmount = 1.0;
-  } else if (isTop && !sliced) {
-    base = vec3(0.106, 0.129, 0.169);
+  if (isShell) {
+    base = shellRock(p, n, shadeN);
+  } else if (isTop) {
+    if (uSliced > 0.5) {
+      // exact section at the clip depth — the bevel must not shift it
+      base = sectionColor(uvw01.xz, uClipNorm, uWallTop, floorY);
+    } else if (uStylizedTop > 0.5) {
+      base = topSurface(p, uvw01, shadeN);
+      specAmount = 1.0;
+    } else {
+      base = vec3(0.106, 0.129, 0.169);
+    }
   } else if (isBottom) {
     base = vec3(0.075, 0.086, 0.106) * (0.85 + 0.3 * fbm(p.xz * 0.09));
   } else {
-    base = sectionColor(p, uvw01, floorY);
+    base = sectionColor(uvw01.xz, clamp(1.0 - uvw01.y, 0.0, 1.0), p.y, floorY);
   }
 
   // --- face-local coordinates, for gradient + edge occlusion --------------
-  vec2 fuv = isTop || isBottom
+  vec2 fuv = (isTop || isBottom || isShell)
     ? uvw01.xz
     : (abs(n.x) > 0.5 ? vec2(uvw01.z, uvw01.y) : vec2(uvw01.x, uvw01.y));
 
-  // ambient occlusion creases along every edge of the block
+  // Ambient occlusion creases along the knife-cut edges. The torn shell opts
+  // out: its own relief already shades it, and a rectangle-shaped crease would
+  // reintroduce exactly the box read this geometry exists to break.
   vec2 ed = min(fuv, 1.0 - fuv);
-  float ao = smoothstep(0.0, 0.030, min(ed.x, ed.y));
+  float ao = isShell ? 1.0 : smoothstep(0.0, 0.030, min(ed.x, ed.y));
 
   // a gentle gradient across each face so no face is one flat tone
-  float grad = isTop || isBottom
-    ? mix(0.94, 1.06, fuv.x * 0.5 + fuv.y * 0.5)
-    : mix(0.80, 1.08, fuv.y) * mix(0.96, 1.05, fuv.x);
+  float grad = isShell
+    ? 1.0
+    : (isTop || isBottom
+      ? mix(0.94, 1.06, fuv.x * 0.5 + fuv.y * 0.5)
+      : mix(0.80, 1.08, fuv.y) * mix(0.96, 1.05, fuv.x));
 
   vec3 L = normalize(LIGHT);
   float diff = max(dot(shadeN, L), 0.0);
@@ -283,6 +335,14 @@ void main() {
   vec3 col = base * shade;
   // cool sky bounce on upward-facing surfaces, warm bounce low on the walls
   col += base * vec3(0.06, 0.09, 0.14) * max(shadeN.y, 0.0) * 0.6;
+
+  // broken rock catches a broad, low glint on its facets — enough to read the
+  // relief, nowhere near enough to look polished
+  if (isShell) {
+    vec3 V = normalize(cameraPosition - p);
+    vec3 H = normalize(normalize(LIGHT) + V);
+    col += vec3(0.34, 0.36, 0.42) * pow(max(dot(shadeN, H), 0.0), 12.0) * 0.30;
+  }
 
   // specular + sky fresnel, water only
   if (specAmount > 0.0) {
@@ -294,7 +354,7 @@ void main() {
   }
 
   // thin bright lip along the very edge, so the block has a defined silhouette
-  float lip = 1.0 - smoothstep(0.0, 0.004, min(ed.x, ed.y));
+  float lip = isShell ? 0.0 : 1.0 - smoothstep(0.0, 0.004, min(ed.x, ed.y));
   col = mix(col, col + vec3(0.09, 0.11, 0.14), lip * 0.55);
 
   outColor = vec4(col, 1.0);
@@ -307,8 +367,16 @@ export default function DioramaBlock({ dataset, meshRef }) {
   const showContours = useVisualizationState((s) => s.showContours)
   const showDetail = useVisualizationState((s) => s.showDetail)
 
-  const { boxDepth, boxSpan } = dataset.meta.bathymetry
-  const half = boxSpan / 2
+  const L = blockLayout(dataset, vertExag, depthClip)
+  const { spanX, spanZ, halfX, halfZ } = L
+  const tileKey = `${dataset.meta.region}|${dataset.meta.date}|${dataset.meta.volume.variable}`
+  // Every region gets its own tear pattern, and the same region always gets the
+  // same one — a chunk that reshuffled on every re-render would read as noise.
+  const seed = useMemo(() => {
+    let h = 0
+    for (let i = 0; i < tileKey.length; i++) h = (h * 31 + tileKey.charCodeAt(i)) % 9973
+    return (h / 9973) * 40
+  }, [tileKey])
   const v = dataset.meta.volume
 
   // one contour per 2 °C, expressed in normalised units
@@ -322,46 +390,56 @@ export default function DioramaBlock({ dataset, meshRef }) {
       uField: { value: dataset.field },
       uLUT: { value: dataset.lut },
       uHeightMap: { value: dataset.height },
-      uBoxMin: { value: new THREE.Vector3(-half, -boxDepth, -half) },
-      uBoxMax: { value: new THREE.Vector3(half, 0, half) },
-      uFloorRange: { value: new THREE.Vector2(-boxDepth, 0) },
-      uClipY: { value: 0 },
+      uBoxMin: { value: new THREE.Vector3(-halfX, L.boxMinY, -halfZ) },
+      uBoxMax: { value: new THREE.Vector3(halfX, L.boxMaxY, halfZ) },
+      uFloorRange: { value: new THREE.Vector2(L.boxMinY, L.boxMaxY) },
+      uSliced: { value: 0 },
+      uClipNorm: { value: 0 },
+      uWallTop: { value: L.wallTop },
       uSat: { value: 1.34 },
       uContour: { value: 1 },
       uContourStep: { value: contourStep },
       uSurfMid: { value: surfMid },
       uSurfGain: { value: 26 },
       uStylizedTop: { value: 1 },
-      uSpan: { value: boxSpan },
+      uSpan: { value: spanX },
     }),
-    [dataset, half, boxDepth, boxSpan, contourStep, surfMid],
+    [dataset, halfX, halfZ, spanX, contourStep, surfMid],   // eslint-disable-line
   )
 
   // Vertical exaggeration scales the box and the floor range TOGETHER, exactly
   // as the raymarch did — the water must never de-register from the seafloor.
-  const d = boxDepth * vertExag
-  const clipY = Math.max(depthClip * vertExag, -d + 0.4)   // never a zero-height block
-  const height = d + clipY
-
   useEffect(() => {
-    uniforms.uBoxMin.value.set(-half, -d, -half)
-    uniforms.uFloorRange.value.set(-d, 0)
-    uniforms.uClipY.value = clipY
+    uniforms.uBoxMin.value.set(-halfX, L.boxMinY, -halfZ)
+    uniforms.uBoxMax.value.set(halfX, L.boxMaxY, halfZ)
+    uniforms.uFloorRange.value.set(L.boxMinY, L.boxMaxY)
+    uniforms.uSliced.value = L.clipNorm > 0.001 ? 1 : 0
+    uniforms.uClipNorm.value = L.clipNorm
+    uniforms.uWallTop.value = L.wallTop
     uniforms.uContour.value = showContours ? 1 : 0
     uniforms.uStylizedTop.value = showDetail ? 1 : 0
     uniforms.uContourStep.value = contourStep
-  }, [uniforms, d, clipY, half, showContours, showDetail, contourStep])
+    if (import.meta.env.DEV) window.__oceanBlock = { ...L, uniforms }
+  }, [uniforms, L, halfX, halfZ, showContours, showDetail, contourStep])
 
-  const geom = useMemo(() => new THREE.BoxGeometry(boxSpan, 1, boxSpan), [boxSpan])
-  const edges = useMemo(() => new THREE.EdgesGeometry(geom), [geom])
-
-  // scale the unit-height box rather than rebuilding geometry every frame
-  const centerY = (clipY - d) / 2
+  // The chunk is built in world Y around the layout's own top/bottom, then the
+  // group re-centres it — so the cut planes land exactly on the data box and
+  // the depth ruler's ticks line up with the section they label.
+  const geom = useMemo(
+    () => ruggedChunk(spanX, spanZ, L.wallTop - L.centerY, L.geomBot - L.centerY, seed),
+    [spanX, spanZ, L.wallTop, L.geomBot, L.centerY, seed],
+  )
+  const edges = useMemo(
+    () => cutOutline(spanX, spanZ, L.wallTop - L.centerY, L.geomBot - L.centerY),
+    [spanX, spanZ, L.wallTop, L.geomBot, L.centerY],
+  )
+  useEffect(() => () => { geom.dispose(); edges.dispose() }, [geom, edges])
 
   return (
-    <group position={[0, centerY, 0]} scale={[1, height, 1]}>
+    <group position={[0, L.centerY, 0]}>
       <mesh ref={meshRef} geometry={geom} userData={{ pickTarget: true }}>
         <rawShaderMaterial
+          key={tileKey}
           glslVersion={THREE.GLSL3}
           vertexShader={vertexShader}
           fragmentShader={fragmentShader}

@@ -12,7 +12,10 @@ export default function ScenePanel({ dataset, cameraRef }) {
   const hostRef = useRef()
   const [expanded, setExpanded] = useState(false)
   const goHome = useVisualizationState((s) => s.goHome)
-  const b = dataset.meta.bbox
+  const loading = useVisualizationState((s) => s.loading)
+  const loadError = useVisualizationState((s) => s.loadError)
+  const m = dataset.meta
+  const isBox = String(m.region).startsWith('bbox:')
 
   // Esc leaves the deep-dive before it reaches the clear-pin handler.
   useEffect(() => {
@@ -28,7 +31,9 @@ export default function ScenePanel({ dataset, cameraRef }) {
     <Panel
       className={`scene-panel${expanded ? ' expanded' : ''}`}
       title="3D volume"
-      sub={`${dataset.meta.regionLabel} · ${b.lat_min}–${b.lat_max}°N ${b.lon_min}–${b.lon_max}°E`}
+      sub={isBox
+        ? `${m.regionLabel} · custom selection`
+        : `${m.regionLabel} · ${m.bbox.lat_min}–${m.bbox.lat_max}°N ${m.bbox.lon_min}–${m.bbox.lon_max}°E`}
       bodyClass="flush"
       tools={
         <>
@@ -47,6 +52,26 @@ export default function ScenePanel({ dataset, cameraRef }) {
         <OceanScene dataset={dataset} cameraRef={cameraRef} />
         <HUDLabel cameraRef={cameraRef} hostRef={hostRef} />
         <DepthRuler cameraRef={cameraRef} hostRef={hostRef} dataset={dataset} />
+
+        {loading && (
+          <div className="scene-busy">
+            <div className="card">
+              <div className="t">Loading region</div>
+              <div className="s">GLORYS subset · bathymetry · depth LUT</div>
+              <div className="bar"><i /></div>
+              <div className="s dim">Not cached yet? The Copernicus fetch takes ~1–2 min.</div>
+            </div>
+          </div>
+        )}
+        {loadError && !loading && (
+          <div className="scene-busy">
+            <div className="card err-card">
+              <div className="t">Could not load that region</div>
+              <div className="s">{String(loadError).slice(0, 180)}</div>
+              <div className="s dim">The previous region is still shown.</div>
+            </div>
+          </div>
+        )}
 
         <div className="scene-legend">
           <span><i style={{ background: '#4fc3f7' }} /> cursor</span>

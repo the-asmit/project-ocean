@@ -77,6 +77,19 @@ REGIONS = {
 }
 DEFAULT_DATE = "2020-01-01"
 
+# Wide bathymetry-only tile the client draws the region picker on. No volume is
+# ever built for it — the minimap needs land/depth and nothing else.
+CONTEXT_REGION = {
+    "label": "North Indian Ocean",
+    "lon_min": 68.0, "lon_max": 98.0, "lat_min": 0.0, "lat_max": 26.0,
+}
+
+# Selection limits. The validated tiles are 5-6 deg on a side; below ~1.5 deg a
+# 1/12 deg tile has too few cells to interpolate, and above ~10 deg the derive
+# step and the browser-side 3-D texture both get unreasonable.
+MIN_SPAN_DEG = 1.5
+MAX_SPAN_DEG = 10.0
+
 app = FastAPI(title="Ocean-Viz API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -92,10 +105,59 @@ def _lock(key: str) -> threading.Lock:
         return _locks.setdefault(key, threading.Lock())
 
 
-def _region(name: str) -> dict:
-    if name not in REGIONS:
-        raise HTTPException(404, f"unknown region '{name}'; have {list(REGIONS)}")
-    return REGIONS[name]
+def _canon(spec: str) -> str:
+    """Canonical cache key for a region spec.
+
+    Named regions pass through. Free bboxes arrive as
+    `bbox:lonMin,lonMax,latMin,latMax` and are rounded to 2 dp so the same
+    drawn rectangle always resolves to the same cached tile.
+    """
+    if not spec.startswith("bbox:"):
+        return spec
+    try:
+        a, b, c, d = (float(x) for x in spec[5:].split(","))
+    except ValueError:
+        raise HTTPException(400, f"malformed bbox '{spec}'; want bbox:lonMin,lonMax,latMin,latMax")
+    lon_min, lon_max = round(min(a, b), 2), round(max(a, b), 2)
+    lat_min, lat_max = round(min(c, d), 2), round(max(c, d), 2)
+    return f"bbox:{lon_min},{lon_max},{lat_min},{lat_max}"
+
+
+def _region(spec: str) -> dict:
+    if spec == "context":
+        return CONTEXT_REGION
+    if not spec.startswith("bbox:"):
+        if spec not in REGIONS:
+            raise HTTPException(404, f"unknown region '{spec}'; have {list(REGIONS)}")
+        return REGIONS[spec]
+
+    lon_min, lon_max, lat_min, lat_max = (float(x) for x in _canon(spec)[5:].split(","))
+    dlon, dlat = lon_max - lon_min, lat_max - lat_min
+    if dlon < MIN_SPAN_DEG or dlat < MIN_SPAN_DEG:
+        raise HTTPException(
+            400, f"selection too small ({dlon:.2f}x{dlat:.2f} deg); minimum is "
+                 f"{MIN_SPAN_DEG} deg on each side")
+    if dlon > MAX_SPAN_DEG or dlat > MAX_SPAN_DEG:
+        raise HTTPException(
+            400, f"selection too large ({dlon:.2f}x{dlat:.2f} deg); maximum is "
+                 f"{MAX_SPAN_DEG} deg on each side")
+    if not (-180 <= lon_min < lon_max <= 180 and -80 <= lat_min < lat_max <= 90):
+        raise HTTPException(400, "selection outside the model domain")
+
+    def fmt(v, pos, neg):
+        return f"{abs(v):.1f}°{pos if v >= 0 else neg}"
+
+    return {
+        "label": f"{fmt(lat_min,'N','S')}-{fmt(lat_max,'N','S')} "
+                 f"{fmt(lon_min,'E','W')}-{fmt(lon_max,'E','W')}",
+        "lon_min": lon_min, "lon_max": lon_max,
+        "lat_min": lat_min, "lat_max": lat_max,
+    }
+
+
+def _slug(spec: str) -> str:
+    """Filesystem-safe cache key."""
+    return _canon(spec).replace(":", "_").replace(",", "_").replace("-", "m")
 
 
 def _bin(data: np.ndarray, filename: str) -> Response:
@@ -113,7 +175,7 @@ def _bin(data: np.ndarray, filename: str) -> Response:
 # cache builders
 # --------------------------------------------------------------------------
 def _bathy_dir(region: str) -> pathlib.Path:
-    key = f"bathy_{region}"
+    key = f"bathy_{_slug(region)}"
     out = DERIVED / key
     with _lock(key):
         if (out / "meta.json").exists():
@@ -137,7 +199,7 @@ def _volume_dir(region: str, date: str, variable: str) -> pathlib.Path:
     if not glorys.VARIABLES[variable]["available"]:
         raise HTTPException(
             501, f"variable '{variable}' has no data wired up yet (coming soon)")
-    key = f"vol_{region}_{date}_{variable}"
+    key = f"vol_{_slug(region)}_{date}_{variable}"
     out = DERIVED / key
     with _lock(key):
         if (out / "meta.json").exists():
@@ -172,7 +234,9 @@ def health():
 def regions():
     return {
         "regions": {k: {**v, "label": v["label"]} for k, v in REGIONS.items()},
-        "defaultRegion": "coastal",
+        "context": CONTEXT_REGION,
+        "selection": {"minSpanDeg": MIN_SPAN_DEG, "maxSpanDeg": MAX_SPAN_DEG},
+        "defaultRegion": "bengal",
         "defaultDate": DEFAULT_DATE,
         "variables": glorys.VARIABLES,
     }
@@ -184,8 +248,8 @@ def dataset(region: str = "coastal", date: str = DEFAULT_DATE, variable: str = "
     vmeta = json.loads((_volume_dir(region, date, variable) / "meta.json").read_text())
     bmeta = json.loads((_bathy_dir(region) / "meta.json").read_text())
     return {
-        "region": region,
-        "regionLabel": REGIONS[region]["label"],
+        "region": _canon(region),
+        "regionLabel": _region(region)["label"],
         "date": date,
         "bbox": _region(region),
         "volume": vmeta,
@@ -203,6 +267,13 @@ def dataset(region: str = "coastal", date: str = DEFAULT_DATE, variable: str = "
 def slice_volume(region: str = "coastal", date: str = DEFAULT_DATE, variable: str = "thetao"):
     d = _volume_dir(region, date, variable)
     return _bin(np.fromfile(d / "field.bin", np.uint8), "field.bin")
+
+
+@app.get("/bathymetry/meta")
+def bathymetry_meta(region: str = "coastal"):
+    """Bathymetry manifest alone — the region picker's basemap needs land and
+    depth, never a volume."""
+    return json.loads((_bathy_dir(region) / "meta.json").read_text())
 
 
 @app.get("/bathymetry")
@@ -224,7 +295,7 @@ def point(
 ):
     """On-demand point query straight from the source NetCDF."""
     _volume_dir(region, date, variable)          # ensures the tile is cached
-    nc = RAW / f"vol_{region}_{date}_{variable}.nc"
+    nc = RAW / f"vol_{_slug(region)}_{date}_{variable}.nc"
     res = glorys.sample_point(nc, variable, lat, lon, depth)
     return {
         "lat": lat, "lon": lon, "depth": depth,

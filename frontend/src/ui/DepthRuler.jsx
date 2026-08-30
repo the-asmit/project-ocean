@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
+import { blockLayout } from '../scene/blockLayout.js'
 
 // Depth ruler along the block's nearest right-hand vertical edge, drawn as a
 // DOM/SVG overlay rather than in-scene text so the labels stay crisp at any
@@ -33,11 +34,10 @@ export default function DepthRuler({ cameraRef, hostRef, dataset }) {
 
   const w = host.clientWidth
   const h = host.clientHeight
-  const { boxSpan, boxDepth, bathyMaxM } = dataset.meta.bathymetry
+  const { bathyMaxM } = dataset.meta.bathymetry
   const maxDataM = dataset.meta.volume.maxDepthM
-  const half = boxSpan / 2
-  const d = boxDepth * vertExag
-  const clipY = Math.max(depthClip * vertExag, -d + 0.4)
+  const L = blockLayout(dataset, vertExag, depthClip)
+  const { halfX, halfZ } = L
 
   const project = (x, y, z) => {
     v.current.set(x, y, z).project(camera)
@@ -48,27 +48,34 @@ export default function DepthRuler({ cameraRef, hostRef, dataset }) {
     }
   }
 
-  // Choose the vertical edge to rule: of the two corners nearest the camera,
-  // take the one further right on screen, so the ruler never lands behind the
-  // block or off the left side of the panel.
-  const corners = [[-half, -half], [half, -half], [half, half], [-half, half]]
+  // Only the three vertical edges of the two knife cuts are candidates: those
+  // are the edges that actually run the full 0 -> deepest span. The torn shell
+  // has no straight edge to rule against, and hanging ticks off it would put
+  // the scale beside geometry that isn't the section.
+  const corners = [[halfX, halfZ], [-halfX, halfZ], [halfX, -halfZ]]
+  const centre = project(0, L.wallTop, 0)
   const scored = corners
-    .map(([x, z]) => ({ x, z, s: project(x, clipY, z) }))
+    .map(([x, z]) => {
+      const s = project(x, L.wallTop, z)
+      return { x, z, s, spread: s.x - centre.x }
+    })
     .filter((c) => !c.s.behind)
   if (!scored.length) return null
-  const edge = scored.reduce((a, b) => (b.s.x > a.s.x ? b : a))
+  // Take the cut corner furthest from the block's centre on screen. That corner
+  // is on the silhouette by construction, so the ruler always has empty panel
+  // to hang its labels in — a nearer corner sits mid-block and writes the scale
+  // straight over the section it is measuring.
+  const edge = scored.reduce((a, b) => (Math.abs(b.spread) > Math.abs(a.spread) ? b : a))
 
-  // outward offset so labels sit clear of the block face
-  const dir = 1                     // rightmost corner: always label outward
-  const off = 16
+  const dir = edge.spread >= 0 ? 1 : -1        // label outward, away from the block
+  const off = 16 * dir
 
-  const clipDepthM = clipY === 0 ? 0 : dataset.map.yToDepth(clipY / vertExag)
+  const clipDepthM = L.clipDepthM
 
   const cand = []
   const add = (m, rank, label) => {
     if (m < clipDepthM - 0.5 || m > bathyMaxM + 0.5) return
-    const y = dataset.map.depthToY(m) * vertExag
-    const p = project(edge.x, y, edge.z)
+    const p = project(edge.x, L.yOfDepthM(m), edge.z)
     if (p.behind) return
     cand.push({ m, rank, label, x: p.x, y: p.y })
   }

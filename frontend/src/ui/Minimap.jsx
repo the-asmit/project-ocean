@@ -1,24 +1,27 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import Panel from './Panel.jsx'
+import { loadBasemap } from '../scene/dataset.js'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 
-// Top-down orientation map.
+// Region picker + orientation map.
 //
-// The coastline is REAL: it is the same GLORYS `deptho` NaN mask the terrain
-// mesh and the shader's floor mask use — land is where there is no sounding.
+// The basemap is a wide bathymetry-only GLORYS tile (North Indian Ocean), so
+// the coastline is REAL — the same `deptho` NaN mask the block's cut faces use.
 // Nothing here is a stock basemap or a traced outline; at 1/12° (~9 km) it is
 // as coarse as the rest of the data, which is honest.
 //
-// North is up, east is right — the map is NOT mirrored, matching the world
-// mapping in dataset.js (lon -> +x, lat -> +z).
+// Drag anywhere to draw a new bounding box. On release the app loads that exact
+// bbox through the normal adapter path (cache first, Copernicus if missing).
+//
+// North is up, east is right — not mirrored, matching dataset.js (lon -> +x,
+// lat -> +z).
 
-const MIN_SIZE = 110      // css px floor for the map square
 const LAND_EDGE = 'rgba(206,228,255,.92)'
+const LAND_FILL = [0x39, 0x40, 0x4a]
 
 // --- marching squares over a smoothed land field -> coastline segments -----
 function coastline(land, W, D) {
-  // light 3x3 blur so the contour reads as a coastline rather than staircase
   const b = new Float32Array(W * D)
   for (let j = 0; j < D; j++) {
     for (let i = 0; i < W; i++) {
@@ -64,58 +67,76 @@ function coastline(land, W, D) {
 export default function Minimap({ dataset, cameraRef }) {
   const canvasRef = useRef()
   const wrapRef = useRef()
-  const baseRef = useRef(null)      // cached static layer (coast + depth)
+  const baseRef = useRef(null)
   const selected = useVisualizationState((s) => s.selected)
   const hover = useVisualizationState((s) => s.hover)
+  const setRegion = useVisualizationState((s) => s.setRegion)
+  const loading = useVisualizationState((s) => s.loading)
 
-  // The map is a panel now, not a fixed 178px overlay: it takes the largest
-  // square its panel can give it and redraws the static layer on resize.
-  const [size, setSize] = useState(MIN_SIZE)
-  const sizeRef = useRef(MIN_SIZE)
+  const [base, setBase] = useState(null)      // { meta, bathy, limits }
+  const [baseErr, setBaseErr] = useState(null)
+  const [box, setBox] = useState(null)        // live drag, in lon/lat
+  const boxRef = useRef(null)
+  boxRef.current = box
+
+  const [size, setSize] = useState({ w: 240, h: 200 })
+  const sizeRef = useRef(size)
   sizeRef.current = size
+
+  useEffect(() => {
+    let dead = false
+    loadBasemap()
+      .then((b) => !dead && setBase(b))
+      .catch((e) => !dead && setBaseErr(String(e)))
+    return () => { dead = true }
+  }, [])
+
+  const bm = base?.meta
+  const aspect = bm ? (bm.lonMax - bm.lonMin) / (bm.latMax - bm.latMin) : 1
+
   useLayoutEffect(() => {
     const el = wrapRef.current
     if (!el) return
     const ro = new ResizeObserver(([e]) => {
       const { width, height } = e.contentRect
-      const n = Math.max(MIN_SIZE, Math.floor(Math.min(width, height)))
-      setSize((prev) => (Math.abs(prev - n) > 1 ? n : prev))
+      const w = Math.max(120, Math.floor(Math.min(width, height * aspect)))
+      const h = Math.max(100, Math.round(w / aspect))
+      setSize((p) => (Math.abs(p.w - w) > 1 || Math.abs(p.h - h) > 1 ? { w, h } : p))
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [aspect])
 
-  const { bathy, meta, map } = dataset
-  const W = meta.bathymetry.bathyW
-  const D = meta.bathymetry.bathyD
-  const LOG_LO = Math.log1p(meta.bathymetry.bathyMinM / 6)
-  const LOG_HI = Math.log1p(meta.bathymetry.bathyMaxM / 6)
-
-  // --- build the static layer once ---------------------------------------
+  // --- static layer: depth raster + coastline ----------------------------
   useEffect(() => {
+    if (!base) return
+    const { meta, bathy } = base
+    const W = meta.bathyW, D = meta.bathyD
     const dpr = Math.min(2, window.devicePixelRatio || 1)
-    const px = Math.round(size * dpr)
+    const px = Math.round(size.w * dpr)
+    const py = Math.round(size.h * dpr)
 
-    // depth/land raster at native grid res, north-up (row 0 = latMax)
     const off = document.createElement('canvas')
     off.width = W; off.height = D
     const g = off.getContext('2d')
     const img = g.createImageData(W, D)
     const land = new Float32Array(W * D)
-    for (let py = 0; py < D; py++) {
-      const j = D - 1 - py                      // flip: north at top
+    // log ramp over the tile's own depth range, or shelf and abyss collapse
+    const lo = Math.log1p(meta.bathyMinM / 6)
+    const hi = Math.log1p(meta.bathyMaxM / 6)
+    for (let ry = 0; ry < D; ry++) {
+      const j = D - 1 - ry                       // flip: north at top
       for (let i = 0; i < W; i++) {
         const v = bathy[j * W + i]
-        const o = (py * W + i) * 4
+        const o = (ry * W + i) * 4
         const isLand = Number.isNaN(v)
-        land[py * W + i] = isLand ? 1 : 0
+        land[ry * W + i] = isLand ? 1 : 0
         if (isLand) {
-          img.data[o] = 0x39; img.data[o + 1] = 0x40; img.data[o + 2] = 0x4a
+          img.data[o] = LAND_FILL[0]; img.data[o + 1] = LAND_FILL[1]; img.data[o + 2] = LAND_FILL[2]
         } else {
-          // shallow -> lighter. Log in METRES, not linear in the already
-          // curve-compressed world-Y, or the whole basin collapses to one value.
-          const m = map.yToDepth(v)
-          const t = 1 - Math.min(1, Math.max(0, (Math.log1p(m / 6) - LOG_LO) / (LOG_HI - LOG_LO || 1)))
+          const m = meta.bathyMaxM * Math.pow(
+            Math.min(1, Math.max(0, -v / meta.boxDepth)), 1 / meta.depthCurve)
+          const t = 1 - Math.min(1, Math.max(0, (Math.log1p(m / 6) - lo) / (hi - lo || 1)))
           img.data[o] = 9 + t * 52
           img.data[o + 1] = 24 + t * 88
           img.data[o + 2] = 48 + t * 122
@@ -125,153 +146,215 @@ export default function Minimap({ dataset, cameraRef }) {
     }
     g.putImageData(img, 0, 0)
 
-    const base = document.createElement('canvas')
-    base.width = px; base.height = px
-    const c = base.getContext('2d')
+    const c2 = document.createElement('canvas')
+    c2.width = px; c2.height = py
+    const c = c2.getContext('2d')
     c.imageSmoothingEnabled = true
     c.imageSmoothingQuality = 'high'
-    c.drawImage(off, 0, 0, px, px)
+    c.drawImage(off, 0, 0, px, py)
 
-    // crisp coastline on top of the smoothed raster
-    const sx = px / (W - 1)
-    const sy = px / (D - 1)
     c.strokeStyle = LAND_EDGE
-    c.lineWidth = 1.5 * dpr
+    c.lineWidth = 1.2 * dpr
     c.lineJoin = 'round'
     c.beginPath()
     for (const [a, b2] of coastline(land, W, D)) {
-      c.moveTo(a[0] * sx, a[1] * sy)
-      c.lineTo(b2[0] * sx, b2[1] * sy)
+      c.moveTo((a[0] / (W - 1)) * px, (a[1] / (D - 1)) * py)
+      c.lineTo((b2[0] / (W - 1)) * px, (b2[1] / (D - 1)) * py)
     }
     c.stroke()
+    baseRef.current = c2
+  }, [base, size])
 
-    baseRef.current = base
-  }, [bathy, W, D, meta, map, LOG_LO, LOG_HI, size])
-
-  // --- live layer: camera + markers, redrawn each frame ------------------
+  // --- live layer --------------------------------------------------------
   useEffect(() => {
+    if (!base) return
     let raf = 0
     const dir = new THREE.Vector3()
+    const { meta } = base
+    const map = dataset.map
 
-    const toMap = (x, z, px) => {
-      const u = x / map.span + 0.5              // 0..1 west->east
-      const v = z / map.span + 0.5              // 0..1 south->north
-      return [u * px, (1 - v) * px]             // flip v: north at top
-    }
+    const toPx = (lon, lat, px, py) => [
+      ((lon - meta.lonMin) / (meta.lonMax - meta.lonMin)) * px,
+      (1 - (lat - meta.latMin) / (meta.latMax - meta.latMin)) * py,
+    ]
 
     const draw = () => {
       raf = requestAnimationFrame(draw)
       const cv = canvasRef.current
-      const base = baseRef.current
-      if (!cv || !base) return
+      const bs = baseRef.current
+      if (!cv || !bs) return
       const dpr = Math.min(2, window.devicePixelRatio || 1)
-      const px = Math.round(sizeRef.current * dpr)
-      if (cv.width !== px) { cv.width = px; cv.height = px }
+      const px = Math.round(sizeRef.current.w * dpr)
+      const py = Math.round(sizeRef.current.h * dpr)
+      if (cv.width !== px || cv.height !== py) { cv.width = px; cv.height = py }
       const c = cv.getContext('2d')
-      c.clearRect(0, 0, px, px)
-      c.drawImage(base, 0, 0)
+      c.clearRect(0, 0, px, py)
+      c.drawImage(bs, 0, 0)
 
-      // hover point (faint)
+      // dim everything outside the loaded tile, so "you are here" is obvious
+      const [tx0, ty0] = toPx(map.lonMin, map.latMax, px, py)
+      const [tx1, ty1] = toPx(map.lonMax, map.latMin, px, py)
+      c.save()
+      c.beginPath()
+      c.rect(0, 0, px, py)
+      c.rect(tx0, ty0, tx1 - tx0, ty1 - ty0)
+      c.fillStyle = 'rgba(6,9,14,.58)'
+      c.fill('evenodd')
+      c.restore()
+
+      c.strokeStyle = loading ? 'rgba(255,196,107,.95)' : 'rgba(79,195,247,.95)'
+      c.lineWidth = 1.4 * dpr
+      c.setLineDash(loading ? [4 * dpr, 3 * dpr] : [])
+      c.strokeRect(tx0, ty0, tx1 - tx0, ty1 - ty0)
+      c.setLineDash([])
+
       if (hover) {
-        const [hx, hy] = toMap(hover.world[0], hover.world[2], px)
-        c.fillStyle = 'rgba(79,195,247,.55)'
+        const [hx, hy] = toPx(map.xToLon(hover.world[0]), map.zToLat(hover.world[2]), px, py)
+        c.fillStyle = 'rgba(79,195,247,.85)'
         c.beginPath(); c.arc(hx, hy, 2.2 * dpr, 0, Math.PI * 2); c.fill()
       }
-
-      // camera position + facing wedge
       const cam = cameraRef?.current
       if (cam) {
-        const [rawX, rawY] = toMap(cam.position.x, cam.position.z, px)
         cam.getWorldDirection(dir)
-        // world +z is north (map -y), world +x is east (map +x)
-        const ang = Math.atan2(dir.x, -dir.z)   // 0 = north/up, clockwise
-        // If the pilot strays past the tile, pin the marker to the map edge so
-        // there is ALWAYS a positional reference rather than a vanished dot.
-        const m = 5 * dpr
-        const cx = Math.min(px - m, Math.max(m, rawX))
-        const cy = Math.min(px - m, Math.max(m, rawY))
-        const inside = rawX === cx && rawY === cy
-
+        const cx = (tx0 + tx1) / 2
+        const cy = (ty0 + ty1) / 2
+        const ang = Math.atan2(dir.x, -dir.z)
         c.save()
-        c.translate(cx, cy)
-        c.rotate(ang)
-        // field-of-view wedge
-        const R = 26 * dpr
-        const half = THREE.MathUtils.degToRad((cam.fov || 60) * 0.5) * (16 / 9)
-        const gr = c.createLinearGradient(0, 0, 0, -R)
-        gr.addColorStop(0, 'rgba(79,195,247,.44)')
-        gr.addColorStop(1, 'rgba(79,195,247,0)')
-        c.fillStyle = gr
-        c.beginPath()
-        c.moveTo(0, 0)
-        c.arc(0, 0, R, -Math.PI / 2 - half, -Math.PI / 2 + half)
-        c.closePath()
-        c.fill()
-        // heading tick
-        c.strokeStyle = 'rgba(79,195,247,.95)'
+        c.translate(cx, cy); c.rotate(ang)
+        c.strokeStyle = 'rgba(79,195,247,.9)'
         c.lineWidth = 1.3 * dpr
-        c.beginPath(); c.moveTo(0, 0); c.lineTo(0, -9 * dpr); c.stroke()
+        c.beginPath(); c.moveTo(0, 6 * dpr); c.lineTo(0, -11 * dpr); c.stroke()
+        c.beginPath(); c.moveTo(-3.5 * dpr, -6 * dpr); c.lineTo(0, -11 * dpr)
+        c.lineTo(3.5 * dpr, -6 * dpr); c.stroke()
         c.restore()
-
-        c.fillStyle = inside ? '#4fc3f7' : '#7b8fa8'
-        c.strokeStyle = 'rgba(5,7,13,.9)'
-        c.lineWidth = 1.6 * dpr
-        c.beginPath(); c.arc(cx, cy, 3.4 * dpr, 0, Math.PI * 2)
-        c.fill(); c.stroke()
       }
-
-      // pinned point LAST so it is never hidden under the camera wedge
       if (selected) {
-        const [sx2, sy2] = toMap(selected.world[0], selected.world[2], px)
-        c.strokeStyle = 'rgba(5,7,13,.85)'
-        c.lineWidth = 3.2 * dpr
-        c.beginPath(); c.arc(sx2, sy2, 5.4 * dpr, 0, Math.PI * 2); c.stroke()
+        const [sx, sy] = toPx(selected.lon, selected.lat, px, py)
         c.strokeStyle = '#ffc46b'
         c.lineWidth = 1.5 * dpr
-        c.beginPath(); c.arc(sx2, sy2, 5.4 * dpr, 0, Math.PI * 2); c.stroke()
-        c.beginPath(); c.moveTo(sx2 - 8 * dpr, sy2); c.lineTo(sx2 - 3 * dpr, sy2)
-        c.moveTo(sx2 + 3 * dpr, sy2); c.lineTo(sx2 + 8 * dpr, sy2)
-        c.moveTo(sx2, sy2 - 8 * dpr); c.lineTo(sx2, sy2 - 3 * dpr)
-        c.moveTo(sx2, sy2 + 3 * dpr); c.lineTo(sx2, sy2 + 8 * dpr); c.stroke()
+        c.beginPath(); c.arc(sx, sy, 4.4 * dpr, 0, Math.PI * 2); c.stroke()
         c.fillStyle = '#ffc46b'
-        c.beginPath(); c.arc(sx2, sy2, 1.9 * dpr, 0, Math.PI * 2); c.fill()
+        c.beginPath(); c.arc(sx, sy, 1.7 * dpr, 0, Math.PI * 2); c.fill()
+      }
+
+      // the rectangle being drawn
+      const b = boxRef.current
+      if (b) {
+        const [bx0, by0] = toPx(Math.min(b.lon0, b.lon1), Math.max(b.lat0, b.lat1), px, py)
+        const [bx1, by1] = toPx(Math.max(b.lon0, b.lon1), Math.min(b.lat0, b.lat1), px, py)
+        c.fillStyle = b.valid ? 'rgba(79,195,247,.18)' : 'rgba(255,139,122,.16)'
+        c.fillRect(bx0, by0, bx1 - bx0, by1 - by0)
+        c.strokeStyle = b.valid ? '#4fc3f7' : '#ff8b7a'
+        c.lineWidth = 1.5 * dpr
+        c.setLineDash([5 * dpr, 3 * dpr])
+        c.strokeRect(bx0, by0, bx1 - bx0, by1 - by0)
+        c.setLineDash([])
       }
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
-  }, [cameraRef, hover, selected, map])
+  }, [base, dataset, cameraRef, hover, selected, loading])
 
-  const b = meta.bbox
-  // Scale bar: the tile is a fixed span of longitude, so one degree of it is a
-  // known number of km at this latitude. Sized to the nearest round distance.
-  const kmAcross = (b.lon_max - b.lon_min) * 111.32 *
-    Math.cos(((b.lat_min + b.lat_max) / 2) * Math.PI / 180)
-  const roundKm = [50, 100, 200, 250].find((k) => k / kmAcross < 0.45) ?? 100
-  const barPx = (roundKm / kmAcross) * size
+  // --- drag to select ----------------------------------------------------
+  useEffect(() => {
+    const cv = canvasRef.current
+    if (!cv || !base) return
+    const { meta, limits } = base
+    const anchor = { current: null }
+
+    const at = (e) => {
+      const r = cv.getBoundingClientRect()
+      const u = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
+      const v = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))
+      return {
+        lon: meta.lonMin + u * (meta.lonMax - meta.lonMin),
+        lat: meta.latMax - v * (meta.latMax - meta.latMin),
+      }
+    }
+    const measure = (a, b) => {
+      const dlon = Math.abs(b.lon - a.lon)
+      const dlat = Math.abs(b.lat - a.lat)
+      return {
+        lon0: a.lon, lat0: a.lat, lon1: b.lon, lat1: b.lat, dlon, dlat,
+        valid: dlon >= limits.minSpanDeg && dlat >= limits.minSpanDeg
+          && dlon <= limits.maxSpanDeg && dlat <= limits.maxSpanDeg,
+      }
+    }
+
+    const down = (e) => {
+      if (e.button !== 0) return
+      cv.setPointerCapture(e.pointerId)
+      anchor.current = at(e)
+      setBox(measure(anchor.current, anchor.current))
+    }
+    const move = (e) => {
+      if (!anchor.current) return
+      setBox(measure(anchor.current, at(e)))
+    }
+    const up = (e) => {
+      if (!anchor.current) return
+      const b = measure(anchor.current, at(e))
+      anchor.current = null
+      setBox(null)
+      if (!b.valid) return
+      const f = (n) => n.toFixed(2)
+      setRegion(`bbox:${f(Math.min(b.lon0, b.lon1))},${f(Math.max(b.lon0, b.lon1))},`
+        + `${f(Math.min(b.lat0, b.lat1))},${f(Math.max(b.lat0, b.lat1))}`)
+    }
+    const cancel = () => { anchor.current = null; setBox(null) }
+
+    cv.addEventListener('pointerdown', down)
+    cv.addEventListener('pointermove', move)
+    cv.addEventListener('pointerup', up)
+    cv.addEventListener('pointercancel', cancel)
+    return () => {
+      cv.removeEventListener('pointerdown', down)
+      cv.removeEventListener('pointermove', move)
+      cv.removeEventListener('pointerup', up)
+      cv.removeEventListener('pointercancel', cancel)
+    }
+  }, [base, setRegion])
+
+  const m = dataset.map
+  const deg = (v, pos, neg) => `${Math.abs(v).toFixed(1)}°${v >= 0 ? pos : neg}`
+  const lim = base?.limits
 
   return (
     <Panel
       className="map-panel"
       title="Map view"
-      sub={`${b.lat_min}–${b.lat_max}°N ${b.lon_min}–${b.lon_max}°E`}
+      sub="North Indian Ocean · drag to select"
       bodyClass="map-body"
     >
-      <div className="mm-wrap" ref={wrapRef}>
-        <canvas ref={canvasRef} style={{ width: size, height: size }} />
+      <div className="mm-wrap" ref={wrapRef} style={{ aspectRatio: String(aspect) }}>
+        {base ? (
+          <canvas ref={canvasRef} className="mm-canvas"
+            style={{ width: size.w, height: size.h }} />
+        ) : (
+          <div className="mm-idle">{baseErr ? 'basemap unavailable' : 'loading basemap…'}</div>
+        )}
         <span className="mm-n">N ↑</span>
       </div>
-      <div className="mm-scale">
-        <span className="bar" style={{ width: barPx }} />
-        <span>{roundKm} km</span>
-        <span style={{ marginLeft: 'auto' }}>1/12° grid</span>
-      </div>
-      <div className="mm-legend">
-        <span><i style={{ background: '#4fc3f7' }} /> camera</span>
-        <span><i style={{ background: '#ffc46b' }} /> pinned</span>
-        {meta.bathymetry.landCells > 0 && (
-          <span><i style={{ background: '#39404a', boxShadow: '0 0 0 1px rgba(160,196,236,.55)' }} /> land</span>
+
+      <div className="mm-pick">
+        {box ? (
+          <span className={box.valid ? 'ok' : 'bad'}>
+            {box.dlon.toFixed(1)}° × {box.dlat.toFixed(1)}°
+            {box.valid ? ' — release to load' : ` — needs ${lim.minSpanDeg}–${lim.maxSpanDeg}° per side`}
+          </span>
+        ) : loading ? (
+          <span className="ok">loading tile…</span>
+        ) : (
+          <span>Drag a box to load a region{lim ? ` · ${lim.minSpanDeg}–${lim.maxSpanDeg}° per side` : ''}</span>
         )}
-        <span style={{ marginLeft: 'auto' }}>{meta.bathymetry.bathyMinM.toFixed(0)}–{meta.bathymetry.bathyMaxM.toFixed(0)} m</span>
+      </div>
+
+      <div className="mm-legend">
+        <span><i style={{ background: '#4fc3f7' }} /> loaded tile</span>
+        <span><i style={{ background: '#ffc46b' }} /> pinned</span>
+        <span style={{ marginLeft: 'auto' }}>
+          {deg(m.latMin, 'N', 'S')}–{deg(m.latMax, 'N', 'S')} {deg(m.lonMin, 'E', 'W')}–{deg(m.lonMax, 'E', 'W')}
+        </span>
       </div>
     </Panel>
   )

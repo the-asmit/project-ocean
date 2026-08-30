@@ -366,6 +366,35 @@ kbd {
   border: none; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .5);
 }
 
+/* busy / error veil over the 3D panel ------------------------------------ */
+.scene-busy {
+  position: absolute; inset: 0; z-index: 8;
+  display: grid; place-items: center;
+  background: rgba(7, 10, 16, .72);
+}
+.scene-busy .card {
+  background: var(--s-2); border: 1px solid var(--line-2); border-radius: var(--r);
+  padding: 15px 18px; box-shadow: var(--shadow); text-align: center; max-width: 46ch;
+}
+.scene-busy .err-card { border-top: 2px solid var(--bad); }
+.scene-busy .t {
+  font-family: var(--mono); font-size: 11px; color: var(--ink);
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.scene-busy .s {
+  font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
+  letter-spacing: .04em; margin-top: 5px; line-height: 1.55; overflow-wrap: anywhere;
+}
+.scene-busy .s.dim { color: var(--ink-4); }
+.scene-busy .bar {
+  width: 150px; height: 2px; background: var(--line-2); border-radius: 1px;
+  overflow: hidden; margin: 11px auto 3px;
+}
+.scene-busy .bar i {
+  display: block; width: 40%; height: 100%; background: var(--accent);
+  animation: sweep 1.15s var(--ease) infinite;
+}
+
 /* depth ruler along the block's near edge -------------------------------- */
 .depth-ruler {
   position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: visible;
@@ -373,6 +402,8 @@ kbd {
 }
 .depth-ruler .spine { stroke: rgba(200, 220, 244, .34); stroke-width: 1; }
 .depth-ruler .tick line { stroke: rgba(200, 220, 244, .34); stroke-width: 1; }
+/* the ruler can now fall against torn rock, not just flat panel background */
+.depth-ruler text { paint-order: stroke; stroke: rgba(6, 9, 14, .82); stroke-width: 3px; stroke-linejoin: round; }
 .depth-ruler .tick text { fill: var(--ink-3); }
 .depth-ruler .tick.strong line { stroke: rgba(224, 238, 255, .78); stroke-width: 1.2; }
 .depth-ruler .tick.strong text { fill: var(--ink); }
@@ -404,12 +435,22 @@ kbd {
   padding: 10px; height: 100%;
 }
 .mm-wrap {
-  position: relative; flex: 0 0 auto; width: 100%; aspect-ratio: 1;
+  position: relative; flex: 0 0 auto; width: 100%;
   display: grid; place-items: center;
   background: var(--s-0); border: 1px solid var(--line); border-radius: 4px;
   overflow: hidden;
 }
 .mm-wrap canvas { display: block; }
+.mm-canvas { cursor: crosshair; touch-action: none; }
+.mm-idle {
+  font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); letter-spacing: .05em;
+}
+.mm-pick {
+  flex: none; font-family: var(--mono); font-size: 9.5px; letter-spacing: .04em;
+  color: var(--ink-3); line-height: 1.5;
+}
+.mm-pick .ok { color: var(--accent); }
+.mm-pick .bad { color: var(--bad); }
 .mm-n {
   position: absolute; top: 6px; right: 8px;
   font-family: var(--mono); font-size: 9px; letter-spacing: .12em; color: var(--ink-3);

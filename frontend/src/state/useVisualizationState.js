@@ -7,7 +7,16 @@ export const useVisualizationState = create((set) => ({
   date: '2020-01-01',
   variable: 'thetao',
   setVariable: (variable) => set({ variable }),
-  setRegion: (region) => set({ region }),
+  // A region is either a named tile or `bbox:lonMin,lonMax,latMin,latMax`.
+  // World coordinates mean something different in every tile, so any pin or
+  // hover from the old one has to go.
+  setRegion: (region) => set({ region, selected: null, hover: null }),
+
+  // True while a tile is being fetched/derived. The previously loaded dataset
+  // stays on screen underneath — a frozen block with no feedback is worse than
+  // an old block with a spinner over it.
+  loading: false,
+  setLoading: (loading) => set({ loading }),
 
   // --- loaded data ------------------------------------------------------
   dataset: null,            // { meta, field, lut, height, bathy, sampler }
@@ -18,9 +27,10 @@ export const useVisualizationState = create((set) => ({
   // --- render controls (defaults carried over from the tuned spike) -----
   depthClip: 0,             // world Y; 0 = no clip
   density: 0.022,           // Beer-Lambert extinction per world unit
-  // The diorama needs real vertical presence: the tile is 550 km across and
-  // 3.5 km deep, so at 1x it is a pancake. 12x makes it a block you can read.
-  vertExag: 12,             // extra vertical scale on top of the depth curve
+  // The diorama needs real vertical presence (at 1x a 600 km x 3.5 km tile is a
+  // pancake) without becoming a cube. 8x reads as a wide slab and still leaves
+  // the 0-454 m data band about 40% of the block's height.
+  vertExag: 8,              // extra vertical scale on top of the depth curve
   showContours: true,       // isotherm contour lines on the cut faces
   showDetail: true,         // synthetic sub-grid seafloor texture (P3)
   setDepthClip: (depthClip) => set({ depthClip }),
@@ -36,7 +46,7 @@ export const useVisualizationState = create((set) => ({
   // Orbit framing for the bounded block: a 3/4 view that shows the top surface
   // and two cut faces at once. Stored as orbit parameters, not a fixed point,
   // so it re-frames correctly when vertical exaggeration changes the height.
-  homeOrbit: { az: 40, el: 25, dist: 430 },
+  homeOrbit: { az: 118, el: 25, dist: 430 },
   homeNonce: 0,
   goHome: () => set((s) => ({ homeNonce: s.homeNonce + 1 })),
 

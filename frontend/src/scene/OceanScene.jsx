@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import DioramaBlock from './DioramaBlock.jsx'
 import PointSelection from '../interaction/PointSelection.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
+import { blockLayout } from './blockLayout.js'
 
 // The diorama sits in space as a display object, so the background is flat and
 // there is NO fog — an exponential falloff would dissolve the far edges and
@@ -79,10 +80,9 @@ export default function OceanScene({ dataset, cameraRef }) {
   const blockRef = useRef()
   const controlsRef = useRef()
 
-  const { boxDepth, boxSpan } = dataset.meta.bathymetry
-  const d = boxDepth * vertExag
-  const clipY = Math.max(depthClip * vertExag, -d + 0.4)
-  const centerY = (clipY - d) / 2
+  const L = blockLayout(dataset, vertExag, depthClip)
+  const reach = Math.max(L.spanX, L.spanZ)
+  const centerY = L.centerY
 
   return (
     <Canvas
@@ -109,8 +109,8 @@ export default function OceanScene({ dataset, cameraRef }) {
       <OrbitControls
         ref={controlsRef}
         target={[0, centerY, 0]}
-        minDistance={boxSpan * 0.42}
-        maxDistance={boxSpan * 3.2}
+        minDistance={reach * 0.42}
+        maxDistance={reach * 3.2}
         maxPolarAngle={Math.PI * 0.495}
         enablePan={false}
         rotateSpeed={0.75}

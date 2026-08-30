@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { makeSeafloorAt } from '../charts/sampling.js'
+import { blockLayout } from '../scene/blockLayout.js'
 
 // Raycasting for hover + click, against the bounded diorama block.
 //
@@ -53,9 +54,9 @@ export default function PointSelection({ dataset, blockRef, enabled = true }) {
   const readout = (p, kind) => {
     const map = dataset.map
     const maxDataM = dataset.meta.volume.maxDepthM
-    // undo vertical exaggeration before converting to metres / sampling
-    const yData = p.y / vertExag
-    const depthM = map.yToDepth(yData)
+    // depth through the shared block layout: the bevel offsets world Y, so
+    // dividing by vertExag alone would report every point too shallow
+    const depthM = blockLayout(dataset, vertExag, depthClip).depthMOfY(p.y)
 
     // Most of this basin's seafloor is far deeper than the 454 m thetao extent,
     // so a raw sample there returns nothing. Rather than a dead readout, sample
@@ -90,10 +91,13 @@ export default function PointSelection({ dataset, blockRef, enabled = true }) {
     if (!hits.length) return null
 
     const h = hits[0]
-    // face normal tells us which cut we landed on. The box is unrotated and
-    // only axis-scaled, so the object-space normal is the world direction.
-    const ny = h.face ? h.face.normal.y : 0
-    const kind = ny > 0.5
+    // Which face we landed on comes from the geometry's per-triangle kind, not
+    // the normal: the torn outer shell's normals point in every direction, and
+    // that shell is rock — it carries no field value and must report none.
+    const kinds = block.geometry?.userData?.faceKind
+    const k = kinds ? kinds[h.faceIndex] : 1
+    if (k === 0 || k === 3) return null            // torn shell / base
+    const kind = k === 2
       ? (depthClip < -0.001 ? 'cross-section' : 'sea surface')
       : 'cross-section'
     return { p: h.point.clone(), kind }

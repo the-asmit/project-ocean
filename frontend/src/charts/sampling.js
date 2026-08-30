@@ -7,12 +7,12 @@ const R_EARTH_KM = 111.32
 // Bilinear seafloor depth (metres, positive down) at a world x/z.
 // NaN where the cell is land — charts must render that as a gap, not as zero.
 export function makeSeafloorAt(dataset) {
-  const { bathyW: W, bathyD: D, boxSpan } = dataset.meta.bathymetry
+  const { bathyW: W, bathyD: D } = dataset.meta.bathymetry
   const bathy = dataset.bathy
   const { map } = dataset
   return (x, z) => {
-    const u = Math.min(W - 1, Math.max(0, (x / boxSpan + 0.5) * (W - 1)))
-    const v = Math.min(D - 1, Math.max(0, (z / boxSpan + 0.5) * (D - 1)))
+    const u = Math.min(W - 1, Math.max(0, (x / map.spanX + 0.5) * (W - 1)))
+    const v = Math.min(D - 1, Math.max(0, (z / map.spanZ + 0.5) * (D - 1)))
     const i0 = Math.min(W - 2, Math.floor(u)), tx = u - i0
     const j0 = Math.min(D - 2, Math.floor(v)), tz = v - j0
     let acc = 0, wsum = 0

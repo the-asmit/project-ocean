@@ -24,13 +24,25 @@ export function makeMapping(meta) {
   const boxDepth = meta.bathymetry.boxDepth
   const bathyMax = meta.bathymetry.bathyMaxM
   const curve = meta.bathymetry.depthCurve
+
+  // The block's FOOTPRINT follows the tile's true ground proportions rather
+  // than always being square: a degree of longitude is shorter than a degree of
+  // latitude away from the equator, and a user-drawn box is rarely square at
+  // all. The longer ground axis gets the full boxSpan; the other scales down.
+  const kmLon = (lonMax - lonMin) * 111.32 * Math.cos(((latMin + latMax) / 2) * Math.PI / 180)
+  const kmLat = (latMax - latMin) * 111.32
+  const longest = Math.max(kmLon, kmLat)
+  const spanX = span * (kmLon / longest)
+  const spanZ = span * (kmLat / longest)
+
   return {
-    span, boxDepth, bathyMax, curve,
+    span, spanX, spanZ, boxDepth, bathyMax, curve,
+    kmLon, kmLat,
     lonMin, lonMax, latMin, latMax,
-    xToLon: (x) => lonMin + (x / span + 0.5) * (lonMax - lonMin),
-    zToLat: (z) => latMin + (z / span + 0.5) * (latMax - latMin),
-    lonToX: (lon) => ((lon - lonMin) / (lonMax - lonMin) - 0.5) * span,
-    latToZ: (lat) => ((lat - latMin) / (latMax - latMin) - 0.5) * span,
+    xToLon: (x) => lonMin + (x / spanX + 0.5) * (lonMax - lonMin),
+    zToLat: (z) => latMin + (z / spanZ + 0.5) * (latMax - latMin),
+    lonToX: (lon) => ((lon - lonMin) / (lonMax - lonMin) - 0.5) * spanX,
+    latToZ: (lat) => ((lat - latMin) / (latMax - latMin) - 0.5) * spanZ,
     // world Y (already un-exaggerated) -> metres
     yToDepth: (y) => bathyMax * Math.pow(Math.min(1, Math.max(0, -y / boxDepth)), 1 / curve),
     depthToY: (m) => -boxDepth * Math.pow(Math.min(1, Math.max(0, m / bathyMax)), curve),
@@ -49,8 +61,8 @@ function makeSampler(meta, rg8, map) {
 
   // world position -> { value, valid }
   return function sample(x, y, z) {
-    const u = (x / map.span + 0.5) * (W - 1)
-    const w = (z / map.span + 0.5) * (D - 1)
+    const u = (x / map.spanX + 0.5) * (W - 1)
+    const w = (z / map.spanZ + 0.5) * (D - 1)
     if (u < 0 || u > W - 1 || w < 0 || w > D - 1) return { value: null, valid: false }
 
     // depth: linear box fraction -> LUT -> texture row (mirrors the shader)
@@ -84,8 +96,26 @@ function makeSampler(meta, rg8, map) {
   }
 }
 
+// The region picker's basemap: one wide bathymetry-only tile plus the server's
+// selection limits. No volume is ever built for it.
+export async function loadBasemap() {
+  const [meta, grid, cfg] = await Promise.all([
+    fetch(`${API}/bathymetry/meta?region=context`).then((r) => {
+      if (!r.ok) throw new Error(`/bathymetry/meta -> ${r.status}`)
+      return r.json()
+    }),
+    bin(`${API}/bathymetry?region=context`),
+    fetch(`${API}/regions`).then((r) => r.json()).catch(() => ({})),
+  ])
+  return {
+    meta,
+    bathy: new Float32Array(grid),
+    limits: cfg.selection || { minSpanDeg: 1.5, maxSpanDeg: 10 },
+  }
+}
+
 export async function loadDataset({ region, date, variable }) {
-  const q = `region=${region}&date=${date}&variable=${variable}`
+  const q = `region=${encodeURIComponent(region)}&date=${date}&variable=${variable}`
   const meta = await fetch(`${API}/dataset?${q}`).then(async (r) => {
     if (!r.ok) throw new Error(`/dataset -> ${r.status}: ${(await r.text()).slice(0, 200)}`)
     return r.json()
@@ -93,8 +123,8 @@ export async function loadDataset({ region, date, variable }) {
 
   const [fieldBuf, heightBuf, bathyBuf] = await Promise.all([
     bin(`${API}/slice/volume?${q}`),
-    bin(`${API}/bathymetry/height?region=${region}`),
-    bin(`${API}/bathymetry?region=${region}`),
+    bin(`${API}/bathymetry/height?region=${encodeURIComponent(region)}`),
+    bin(`${API}/bathymetry?region=${encodeURIComponent(region)}`),
   ])
 
   const { W, H, D } = meta.volume

@@ -47,15 +47,17 @@ export default function App() {
   const variable = useVisualizationState((s) => s.variable)
   const clearSelected = useVisualizationState((s) => s.clearSelected)
   const goHome = useVisualizationState((s) => s.goHome)
+  const setLoading = useVisualizationState((s) => s.setLoading)
   const cameraRef = useRef()
 
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
     loadDataset({ region, date, variable })
-      .then((d) => !cancelled && setDataset(d))
-      .catch((e) => !cancelled && setLoadError(String(e)))
+      .then((d) => { if (!cancelled) { setDataset(d); setLoading(false) } })
+      .catch((e) => { if (!cancelled) { setLoadError(String(e)); setLoading(false) } })
     return () => { cancelled = true }
-  }, [region, date, variable, setDataset, setLoadError])
+  }, [region, date, variable, setDataset, setLoadError, setLoading])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -67,7 +69,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [clearSelected, goHome])
 
-  if (loadError) {
+  if (loadError && !dataset) {
     return (
       <div className="err">
         <div className="box">
