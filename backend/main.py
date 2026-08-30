@@ -66,6 +66,14 @@ REGIONS = {
         "label": "Central Bay of Bengal (deep)",
         "lon_min": 85.0, "lon_max": 90.0, "lat_min": 10.0, "lat_max": 15.0,
     },
+    # The east-coast tile: Andhra/Odisha coastline, its shelf, the slope, and
+    # the deep western Bay. `open` is all abyssal plain with ZERO land cells,
+    # so it can carry neither a coastline on the map nor shelf structure on the
+    # block's cut faces.
+    "bengal": {
+        "label": "Bay of Bengal — India east coast",
+        "lon_min": 79.5, "lon_max": 85.5, "lat_min": 12.0, "lat_max": 18.0,
+    },
 }
 DEFAULT_DATE = "2020-01-01"
 

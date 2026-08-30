@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
-import VolumeRaymarch from './VolumeRaymarch.jsx'
-import BathymetryTerrain from './BathymetryTerrain.jsx'
-import FreeFlyCamera from './FreeFlyCamera.jsx'
+import DioramaBlock from './DioramaBlock.jsx'
 import PointSelection from '../interaction/PointSelection.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 
-const BG = '#05070d'
+// The diorama sits in space as a display object, so the background is flat and
+// there is NO fog — an exponential falloff would dissolve the far edges and
+// undo the whole point of a bounded block.
+const BG = '#070a10'
 
 // Small additive marker on the picked point. Additive only — it brightens the
 // point, it never darkens the rest of the scene.
@@ -17,10 +18,8 @@ function PickMarker({ point, color, pulse }) {
   useFrame(({ clock, camera }) => {
     const g = ref.current
     if (!g) return
-    // keep roughly constant screen size — a fixed world-size sphere blows out
-    // and fills the viewport when you fly close to the seafloor
     const d = camera.position.distanceTo(g.position)
-    const s = THREE.MathUtils.clamp(d / 34, 0.3, 3.5)
+    const s = THREE.MathUtils.clamp(d / 90, 0.5, 4.5)
       * (pulse ? 1 + Math.sin(clock.elapsedTime * 3.4) * 0.16 : 1)
     g.scale.setScalar(s)
   })
@@ -28,124 +27,96 @@ function PickMarker({ point, color, pulse }) {
   return (
     <group ref={ref} position={point.world}>
       <mesh>
-        <sphereGeometry args={[0.42, 16, 12]} />
-        <meshBasicMaterial color={color} transparent opacity={0.85}
+        <sphereGeometry args={[0.9, 16, 12]} />
+        <meshBasicMaterial color={color} transparent opacity={0.9}
           blending={THREE.AdditiveBlending} depthTest={false} depthWrite={false} />
       </mesh>
       <mesh>
-        <sphereGeometry args={[0.95, 16, 12]} />
-        <meshBasicMaterial color={color} transparent opacity={0.14}
+        <sphereGeometry args={[2.1, 16, 12]} />
+        <meshBasicMaterial color={color} transparent opacity={0.16}
           blending={THREE.AdditiveBlending} depthTest={false} depthWrite={false} />
       </mesh>
     </group>
   )
 }
 
-// Owns the camera pose: publishes it to cameraRef, aims it on mount, and
-// re-applies the home pose whenever homeNonce ticks. FreeFlyCamera re-reads
-// yaw/pitch off the quaternion on the same nonce (it renders after this).
-function CameraBridge({ cameraRef }) {
+// Publishes the camera, and re-frames the block whenever homeNonce ticks or the
+// block's height changes under the vertical-exaggeration control.
+function CameraBridge({ cameraRef, controlsRef, blockCenterY }) {
   const { camera } = useThree()
-  const homePose = useVisualizationState((s) => s.homePose)
+  const homeOrbit = useVisualizationState((s) => s.homeOrbit)
   const homeNonce = useVisualizationState((s) => s.homeNonce)
 
   useEffect(() => {
     cameraRef.current = camera
-    if (import.meta.env.DEV) window.__oceanCamera = camera   // dev-only probe
+    if (import.meta.env.DEV) window.__oceanCamera = camera
   }, [camera, cameraRef])
 
   useEffect(() => {
-    const { position, target } = homePose
-    camera.position.set(position[0], position[1], position[2])
-    camera.lookAt(target[0], target[1], target[2])
+    const { az, el, dist } = homeOrbit
+    const a = THREE.MathUtils.degToRad(az)
+    const e = THREE.MathUtils.degToRad(el)
+    camera.position.set(
+      dist * Math.sin(a) * Math.cos(e),
+      blockCenterY + dist * Math.sin(e),
+      dist * Math.cos(a) * Math.cos(e),
+    )
+    const c = controlsRef.current
+    if (c) { c.target.set(0, blockCenterY, 0); c.update() }
+    else camera.lookAt(0, blockCenterY, 0)
     camera.updateProjectionMatrix()
-  }, [camera, homePose, homeNonce])
+  }, [camera, controlsRef, homeOrbit, homeNonce, blockCenterY])
 
   return null
 }
 
 export default function OceanScene({ dataset, cameraRef }) {
-  const navMode = useVisualizationState((s) => s.navMode)
   const hover = useVisualizationState((s) => s.hover)
   const selected = useVisualizationState((s) => s.selected)
-  const homePose = useVisualizationState((s) => s.homePose)
   const vertExag = useVisualizationState((s) => s.vertExag)
-  const terrainRef = useRef()
+  const depthClip = useVisualizationState((s) => s.depthClip)
+  const homeOrbit = useVisualizationState((s) => s.homeOrbit)
+  const blockRef = useRef()
+  const controlsRef = useRef()
 
-  const { boxSpan, boxDepth } = dataset.meta.bathymetry
-  const half = boxSpan / 2
-
-  // Bilinear lookup of the REAL seafloor at any x/z, so the flight envelope can
-  // follow the terrain instead of using one flat number. Land cells (NaN) read
-  // as just above the surface, so you fly over the island rather than into it.
-  const floorAt = useMemo(() => {
-    const W = dataset.meta.bathymetry.bathyW
-    const D = dataset.meta.bathymetry.bathyD
-    const bathy = dataset.bathy
-    const g = (i, j) => {
-      const v = bathy[j * W + i]
-      return Number.isNaN(v) ? 0.25 : v
-    }
-    return (x, z) => {
-      const u = THREE.MathUtils.clamp(x / boxSpan + 0.5, 0, 1) * (W - 1)
-      const v = THREE.MathUtils.clamp(z / boxSpan + 0.5, 0, 1) * (D - 1)
-      const i0 = Math.min(W - 2, Math.floor(u)), tx = u - i0
-      const j0 = Math.min(D - 2, Math.floor(v)), tz = v - j0
-      return (
-        (g(i0, j0) * (1 - tx) + g(i0 + 1, j0) * tx) * (1 - tz) +
-        (g(i0, j0 + 1) * (1 - tx) + g(i0 + 1, j0 + 1) * tx) * tz
-      )
-    }
-  }, [dataset, boxSpan])
-
-  // Flight envelope, tied to the REAL tile.
-  // Horizontal: held 30 units inside the tile edge — sitting exactly ON the edge
-  // faces you into nothing, so the margin keeps terrain in frame even looking
-  // straight outward (fog reaches ~50% at ~63 units).
-  // Vertical: ceiling just above the sea surface; FLOOR FOLLOWS THE SEAFLOOR, so
-  // you can never end up underneath the terrain staring at black.
-  const bounds = {
-    half: half - 30,
-    ceil: 4,
-    floorAt,
-    floorClearance: 3.2,   // enough standoff that terrain never fills the frame
-    vertExag,
-  }
+  const { boxDepth, boxSpan } = dataset.meta.bathymetry
+  const d = boxDepth * vertExag
+  const clipY = Math.max(depthClip * vertExag, -d + 0.4)
+  const centerY = (clipY - d) / 2
 
   return (
     <Canvas
-      camera={{ position: homePose.position, fov: 60, near: 0.08, far: 900 }}
+      camera={{ position: [190, 110, 227], fov: 42, near: 1, far: 3000 }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       dpr={[1, 1.75]}
     >
-      <CameraBridge cameraRef={cameraRef} />
+      <CameraBridge cameraRef={cameraRef} controlsRef={controlsRef} blockCenterY={centerY} />
       <color attach="background" args={[BG]} />
-      {/* exponential fog in the background colour — far falloff only, near view
-          stays clear. Tuned in the spike; do not raise without re-checking the
-          "open and breathable" look. */}
-      <fogExp2 attach="fog" args={[BG, 0.011]} />
 
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[40, 60, 20]} intensity={1.15} />
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[80, 140, 60]} intensity={1.05} />
 
-      <BathymetryTerrain dataset={dataset} meshRef={terrainRef} />
-      <VolumeRaymarch dataset={dataset} />
+      <DioramaBlock dataset={dataset} meshRef={blockRef} />
 
-      <PickMarker point={hover} color="#58d4ff" pulse={false} />
-      <PickMarker point={selected} color="#ffcf7a" pulse />
+      <PickMarker point={hover} color="#4fc3f7" pulse={false} />
+      <PickMarker point={selected} color="#ffc46b" pulse />
 
-      <PointSelection dataset={dataset} terrainRef={terrainRef} />
+      <PointSelection dataset={dataset} blockRef={blockRef} />
 
-      <FreeFlyCamera enabled={navMode === 'fly'} bounds={bounds} />
-      {navMode === 'orbit' && (
-        <OrbitControls
-          target={homePose.target}
-          minDistance={3}
-          maxDistance={260}
-          maxPolarAngle={Math.PI * 0.92}
-          makeDefault
-        />
-      )}
+      {/* Orbit-only: this is a bounded object you walk around, not a space you
+          fly through. Free-fly lives on in FreeFlyCamera.jsx for the future
+          fullscreen deep-dive. */}
+      <OrbitControls
+        ref={controlsRef}
+        target={[0, centerY, 0]}
+        minDistance={boxSpan * 0.42}
+        maxDistance={boxSpan * 3.2}
+        maxPolarAngle={Math.PI * 0.495}
+        enablePan={false}
+        rotateSpeed={0.75}
+        zoomSpeed={0.8}
+        makeDefault
+      />
     </Canvas>
   )
 }

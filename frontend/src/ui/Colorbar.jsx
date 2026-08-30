@@ -1,40 +1,33 @@
+import Panel from './Panel.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
+import { RAMP_CSS } from '../charts/sampling.js'
 
-// Matches the shader's transfer() stops exactly — same five colours, same
-// positions. If transfer() changes, change this.
-const STOPS = [
-  'rgb(8,26,107)', 'rgb(26,140,217)', 'rgb(89,209,140)',
-  'rgb(250,217,77)', 'rgb(235,64,38)',
-]
-const GRAD = `linear-gradient(to top, ${STOPS.join(', ')})`
-
+// The ramp is shared with the shader's transfer() and with the chart colours,
+// so a voxel, an isotherm and this bar all mean the same thing at the same value.
 export default function Colorbar({ dataset }) {
   const variable = useVisualizationState((s) => s.variable)
-  const selected = useVisualizationState((s) => s.selected)
   const v = dataset.meta.volume
   const info = dataset.meta.variables[variable]
-
   const lo = v.valueMin
   const hi = v.valueMax
-  const ticks = [0, 0.25, 0.5, 0.75, 1]
+  const ticks = [1, 0.75, 0.5, 0.25, 0]
 
   return (
-    <div className={`card overlay colorbar${selected ? ' shifted' : ''}`}>
-      <div className="h-label" style={{ textAlign: 'center' }}>{info.label}</div>
-      <div className="scale">
-        <div className="bar" style={{ background: GRAD }} />
-        <div className="ticks">
+    <Panel title="Scale" sub={`${info.label} · ${info.units}`}>
+      <div className="cbar">
+        <div className="bar" style={{ background: RAMP_CSS, height: 132 }} />
+        <div className="ticks" style={{ height: 132 }}>
           {ticks.map((t) => (
             <span key={t} style={{ top: `${(1 - t) * 100}%` }}>
-              {(lo + t * (hi - lo)).toFixed(1)}
+              {(lo + t * (hi - lo)).toFixed(0)}
             </span>
           ))}
         </div>
       </div>
-      <div className="h-label cap">{info.units}</div>
-      <div className="h-label cap" style={{ marginTop: 6, opacity: 0.75 }}>
-        data {v.dataMin.toFixed(1)}–{v.dataMax.toFixed(1)}
+      <div className="cbar-foot">
+        <span>in tile</span>
+        <span>{v.dataMin.toFixed(1)}–{v.dataMax.toFixed(1)} {info.units}</span>
       </div>
-    </div>
+    </Panel>
   )
 }

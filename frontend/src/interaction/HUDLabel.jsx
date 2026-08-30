@@ -22,11 +22,12 @@ function project(world, camera, w, h, v) {
   }
 }
 
-function Card({ pt, screen, pinned }) {
+function Card({ pt, screen, pinned, box }) {
   const ax = screen.x
   const ay = screen.y
-  // flip the leader to the other side when close to the right/top edge
-  const flipX = ax + OFF_X + 175 > window.innerWidth
+  // flip the leader to the other side when close to the right/top edge of the
+  // PANEL (not the window — the scene is bounded now)
+  const flipX = ax + OFF_X + 175 > box.w
   const flipY = ay + OFF_Y < 8
   const cx = ax + (flipX ? -OFF_X - 165 : OFF_X)
   const cy = ay + (flipY ? -OFF_Y : OFF_Y)
@@ -69,7 +70,7 @@ function Card({ pt, screen, pinned }) {
   )
 }
 
-export default function HUDLabel({ cameraRef }) {
+export default function HUDLabel({ cameraRef, hostRef }) {
   const hover = useVisualizationState((s) => s.hover)
   const selected = useVisualizationState((s) => s.selected)
   const [, force] = useState(0)
@@ -87,18 +88,22 @@ export default function HUDLabel({ cameraRef }) {
   }, [])
 
   const camera = cameraRef?.current
-  if (!camera) return null
-  const w = window.innerWidth
-  const h = window.innerHeight
+  const host = hostRef?.current
+  if (!camera || !host) return null
+  // Project into the PANEL's box. The layer is absolutely positioned inside the
+  // same host, so these coordinates are already local — no window offsets.
+  const w = host.clientWidth
+  const h = host.clientHeight
+  const box = { w, h }
 
   const items = []
   if (selected) {
     const s = project(selected.world, camera, w, h, vec.current)
-    if (!s.behind) items.push(<Card key="sel" pt={selected} screen={s} pinned />)
+    if (!s.behind) items.push(<Card key="sel" pt={selected} screen={s} box={box} pinned />)
   }
   if (hover && (!selected || hover.world[0] !== selected.world[0])) {
     const s = project(hover.world, camera, w, h, vec.current)
-    if (!s.behind) items.push(<Card key="hov" pt={hover} screen={s} />)
+    if (!s.behind) items.push(<Card key="hov" pt={hover} screen={s} box={box} />)
   }
 
   return <div className="hud-layer">{items}</div>

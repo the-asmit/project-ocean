@@ -1,0 +1,7 @@
+{
+  "files": ["frontend/index.html"],
+  "exclude": ["spike/**", "spike-real-data/**", "**/dist/**"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}

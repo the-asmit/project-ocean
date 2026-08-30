@@ -2,26 +2,22 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
+import { makeSeafloorAt } from '../charts/sampling.js'
 
-// Raycasting for hover + click.
+// Raycasting for hover + click, against the bounded diorama block.
 //
-// ARCHITECTURAL CHOICE (volume vs mesh): a volumetric field has no surface, so
-// "the point under the cursor" is undefined for the volume alone. Rather than
-// invent one (e.g. first-nonzero-alpha along the ray, which drifts with density
-// and reads as noise), we hit-test two REAL surfaces and take the nearer:
+// ARCHITECTURAL CHOICE (volume vs surface): a volumetric field has no surface,
+// so "the point under the cursor" is undefined for the field alone. The block
+// gives us real ones: its cut faces ARE cross-sections through the water
+// column, so every hit is a genuine (lat, lon, depth) with a genuine value.
+//   * a side wall   -> a vertical section point at that depth
+//   * the top face  -> the sea surface, or the horizontal section once the
+//                      depth-clip has sliced the block down
 //
-//   1. the bathymetry mesh  -> a seafloor point, depth = true seafloor depth
-//   2. the depth-clip plane -> when the user has cut the volume, the exposed
-//      cross-section is a real surface through the water column
-//
-// Either way the value shown is sampled from the same RG8 volume the shader
-// renders, via dataset.sampler. So hovering the seafloor reads the water just
-// above it, and hovering a cross-section reads the water at that exact depth.
-// If the user wants mid-water readings they pull the depth-clip slider — which
-// is a control they already have.
-
-export default function PointSelection({ dataset, terrainRef, enabled = true }) {
-  const { camera, gl, scene } = useThree()
+// Either way the value shown is sampled from the same RG8 volume the block
+// shader renders, via dataset.sampler — one number, one source.
+export default function PointSelection({ dataset, blockRef, enabled = true }) {
+  const { camera, gl } = useThree()
   const setHover = useVisualizationState((s) => s.setHover)
   const setSelected = useVisualizationState((s) => s.setSelected)
   const depthClip = useVisualizationState((s) => s.depthClip)
@@ -30,12 +26,9 @@ export default function PointSelection({ dataset, terrainRef, enabled = true }) 
   const raycaster = useMemo(() => new THREE.Raycaster(), [])
   const ndc = useRef(new THREE.Vector2(0, 0))
   const inside = useRef(false)
-  const clipPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0))
-  const hitPoint = useRef(new THREE.Vector3())
   const lastEmit = useRef(0)
 
-  const { boxSpan } = dataset.meta.bathymetry
-  const half = boxSpan / 2
+  const seafloorAt = useMemo(() => makeSeafloorAt(dataset), [dataset])
 
   useEffect(() => {
     const el = gl.domElement
@@ -64,13 +57,16 @@ export default function PointSelection({ dataset, terrainRef, enabled = true }) 
     const yData = p.y / vertExag
     const depthM = map.yToDepth(yData)
 
-    // Most of this region's seafloor is deeper than the 454 m thetao extent, so
-    // a raw sample there returns nothing. Rather than a dead readout, sample at
-    // the deepest level that DOES have data and label it — the reported seafloor
+    // Most of this basin's seafloor is far deeper than the 454 m thetao extent,
+    // so a raw sample there returns nothing. Rather than a dead readout, sample
+    // at the deepest level that DOES have data and label it — the reported
     // depth stays the true one. Disclosure, not invention.
     const clamped = depthM > maxDataM
     const sampleDepthM = clamped ? maxDataM : depthM
     const s = dataset.sampler(p.x, map.depthToY(sampleDepthM), p.z)
+
+    const floorM = seafloorAt(p.x, p.z)
+    const belowFloor = Number.isFinite(floorM) && depthM > floorM + 1
 
     return {
       world: [p.x, p.y, p.z],
@@ -79,45 +75,34 @@ export default function PointSelection({ dataset, terrainRef, enabled = true }) 
       depthM,
       sampleDepthM,
       clamped,
+      seafloorM: Number.isFinite(floorM) ? floorM : null,
       value: s.value,
       valid: s.valid,
-      kind,
+      kind: belowFloor ? 'below seafloor' : kind,
     }
   }
 
   const pick = () => {
+    const block = blockRef?.current
+    if (!block) return null
     raycaster.setFromCamera(ndc.current, camera)
-    let best = null
-    let bestDist = Infinity
+    const hits = raycaster.intersectObject(block, false)
+    if (!hits.length) return null
 
-    const terrain = terrainRef?.current
-    if (terrain) {
-      const hits = raycaster.intersectObject(terrain, false)
-      if (hits.length && hits[0].distance < bestDist) {
-        bestDist = hits[0].distance
-        best = { p: hits[0].point.clone(), kind: 'seafloor' }
-      }
-    }
-
-    if (depthClip < 0) {
-      clipPlane.current.constant = -depthClip * vertExag
-      const hit = raycaster.ray.intersectPlane(clipPlane.current, hitPoint.current)
-      if (hit) {
-        const d = raycaster.ray.origin.distanceTo(hit)
-        if (d < bestDist && Math.abs(hit.x) <= half && Math.abs(hit.z) <= half) {
-          bestDist = d
-          best = { p: hit.clone(), kind: 'cross-section' }
-        }
-      }
-    }
-    return best
+    const h = hits[0]
+    // face normal tells us which cut we landed on. The box is unrotated and
+    // only axis-scaled, so the object-space normal is the world direction.
+    const ny = h.face ? h.face.normal.y : 0
+    const kind = ny > 0.5
+      ? (depthClip < -0.001 ? 'cross-section' : 'sea surface')
+      : 'cross-section'
+    return { p: h.point.clone(), kind }
   }
 
   useFrame(() => {
     if (!enabled || !inside.current) return
-    // throttle to ~30 Hz; the raycast against a 512² mesh is not free
     const now = performance.now()
-    if (now - lastEmit.current < 33) return
+    if (now - lastEmit.current < 33) return    // ~30 Hz
     lastEmit.current = now
 
     const hit = pick()
@@ -140,7 +125,7 @@ export default function PointSelection({ dataset, terrainRef, enabled = true }) 
       if (e.button !== 0 || !downAt.current) return
       const moved = Math.hypot(e.clientX - downAt.current.x, e.clientY - downAt.current.y)
       downAt.current = null
-      if (moved > 4) return          // that was a drag (look / orbit), not a click
+      if (moved > 4) return          // that was an orbit drag, not a click
       const hit = pickRef.current()
       if (hit) setSelected(readoutRef.current(hit.p, hit.kind))
     }
