@@ -3,6 +3,7 @@ import Panel, { IconButton } from './Panel.jsx'
 import OceanScene from '../scene/OceanScene.jsx'
 import HUDLabel from '../interaction/HUDLabel.jsx'
 import DepthRuler from './DepthRuler.jsx'
+import SectionBadge from './SectionBadge.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { IconExpand, IconCollapse, IconHome } from './icons.jsx'
 
@@ -52,6 +53,7 @@ export default function ScenePanel({ dataset, cameraRef }) {
         <OceanScene dataset={dataset} cameraRef={cameraRef} />
         <HUDLabel cameraRef={cameraRef} hostRef={hostRef} />
         <DepthRuler cameraRef={cameraRef} hostRef={hostRef} dataset={dataset} />
+        <SectionBadge dataset={dataset} />
 
         {loading && (
           <div className="scene-busy">

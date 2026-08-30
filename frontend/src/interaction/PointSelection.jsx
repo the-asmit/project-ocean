@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { makeSeafloorAt } from '../charts/sampling.js'
 import { blockLayout } from '../scene/blockLayout.js'
+import { nearestLevel } from './useProbe.js'
 
 // Raycasting for hover + click, against the bounded diorama block.
 //
@@ -87,6 +88,8 @@ export default function PointSelection({ dataset, blockRef, enabled = true }) {
     const block = blockRef?.current
     if (!block) return null
     raycaster.setFromCamera(ndc.current, camera)
+
+
     const hits = raycaster.intersectObject(block, false)
     if (!hits.length) return null
 
@@ -131,7 +134,11 @@ export default function PointSelection({ dataset, blockRef, enabled = true }) {
       downAt.current = null
       if (moved > 4) return          // that was an orbit drag, not a click
       const hit = pickRef.current()
-      if (hit) setSelected(readoutRef.current(hit.p, hit.kind))
+      if (!hit) return
+      const r = readoutRef.current(hit.p, hit.kind)
+      // start the depth cursor on the level nearest the click, so pinning a
+      // point does not silently move the readout to a different depth
+      setSelected(r, nearestLevel(dataset, r.depthM))
     }
     el.addEventListener('pointerdown', down)
     el.addEventListener('pointerup', up)
@@ -139,7 +146,7 @@ export default function PointSelection({ dataset, blockRef, enabled = true }) {
       el.removeEventListener('pointerdown', down)
       el.removeEventListener('pointerup', up)
     }
-  }, [gl, setSelected])
+  }, [gl, setSelected, dataset])
 
   return null
 }

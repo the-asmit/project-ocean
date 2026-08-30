@@ -65,6 +65,10 @@ function Card({ pt, screen, pinned, box }) {
         )}
         <div><span className="k">lat </span>{pt.lat.toFixed(3)}°　<span className="k">lon </span>{pt.lon.toFixed(3)}°</div>
         <div><span className="k">{pt.kind === 'seafloor' ? 'seafloor' : 'depth'} </span>{pt.depthM.toFixed(0)} m</div>
+        {/* which surface the number came from. The movable section plane draws
+            over the block, so without this a reading off the plane and a
+            reading off a cut face behind it are indistinguishable. */}
+        <div className="k src">{pt.kind}</div>
       </div>
     </>
   )

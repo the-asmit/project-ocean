@@ -6,6 +6,7 @@ import {
 import Panel from '../ui/Panel.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { sampleProfile, makeSeafloorAt, rampColor } from './sampling.js'
+import { useProbe } from '../interaction/useProbe.js'
 
 const GRID = '#1e2733'
 const AXIS = '#5a6a80'
@@ -33,6 +34,7 @@ function ProfileTip({ active, payload, units }) {
 export default function ProfileChart({ dataset }) {
   const selected = useVisualizationState((s) => s.selected)
   const hover = useVisualizationState((s) => s.hover)
+  const probe = useProbe(dataset)
 
   const v = dataset.meta.volume
   const b = dataset.meta.bathymetry
@@ -98,7 +100,19 @@ export default function ProfileChart({ dataset }) {
               />
             )}
             {selected?.depthM != null && selected.depthM <= axisMax && (
-              <ReferenceLine y={selected.depthM} stroke="#ffc46b" strokeWidth={1} strokeOpacity={0.8} />
+              <ReferenceLine y={selected.depthM} stroke="#ffc46b" strokeWidth={1} strokeOpacity={0.35} />
+            )}
+            {/* the depth cursor's level, labelled — the chart and the 3D marker
+                are reading the same index, so this line IS the ring in the scene */}
+            {probe && probe.depthM <= axisMax && (
+              <ReferenceLine
+                y={probe.depthM} stroke="#ffc46b" strokeWidth={1.4}
+                label={{
+                  value: `L${probe.level} · ${probe.depthM.toFixed(0)} m`,
+                  position: 'insideTopRight', fill: '#ffc46b', fontSize: 9,
+                  fontFamily: 'IBM Plex Mono, monospace',
+                }}
+              />
             )}
 
             <Line

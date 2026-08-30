@@ -11,7 +11,9 @@ const OBSERVATIONS = [
   { key: 'drifter', label: 'Drifters', color: '#4fc3f7' },
 ]
 
-const TOOLS = ['Select region', 'Draw transect', 'Measure distance']
+// Region select is the map's drag behaviour and genuinely works, so it is not
+// badged SOON — that would be a claim the user can disprove in one click.
+const TOOLS = ['Draw transect', 'Measure distance']
 
 function Layer({ on, disabled, children, onClick, swatch, badge, title }) {
   return (
@@ -91,13 +93,16 @@ export default function DataLayersPanel({ dataset }) {
 
       <Panel title="Tools">
         <div className="layers" style={{ marginBottom: 10 }}>
+          <Layer on disabled badge="MAP" title="Drag the map to load a new GLORYS tile">
+            Select region
+          </Layer>
           {TOOLS.map((t) => (
             <Layer key={t} disabled badge="SOON">{t}</Layer>
           ))}
         </div>
         <p className="hint" style={{ margin: 0 }}>
-          Until these ship: hover the 3D view to read a value, click to pin one.
-          The transect follows the pinned point.
+          Hover the 3D view to read a value, click to pin one. The profile and
+          the transect both follow the pinned point.
         </p>
       </Panel>
     </>

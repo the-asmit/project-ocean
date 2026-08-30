@@ -1,7 +1,63 @@
 import { useEffect, useState } from 'react'
 import Panel, { IconButton } from './Panel.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
+import { useProbe } from '../interaction/useProbe.js'
 import { IconTarget, IconCollapse } from './icons.jsx'
+
+// The depth cursor. The pin fixes a lon/lat; this travels down that column and
+// reads the interior at each real model level, which is the whole point of
+// holding a volume rather than a stack of surfaces — no re-pick, no re-fetch,
+// just the column under one point.
+function DepthCursor({ dataset, probe }) {
+  const setProbeIndex = useVisualizationState((s) => s.setProbeIndex)
+  const units = dataset.meta.volume.units
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.code !== 'ArrowUp' && e.code !== 'ArrowDown') return
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      e.preventDefault()
+      const next = probe.index + (e.code === 'ArrowDown' ? 1 : -1)
+      setProbeIndex(Math.min(probe.levelCount - 1, Math.max(0, next)))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [probe.index, probe.levelCount, setProbeIndex])
+
+  const dead = probe.value == null
+  return (
+    <div className="probe">
+      <div className="srow">
+        <label className="lbl" htmlFor="sl-depth-cursor">Depth cursor</label>
+        <span className="num">L{probe.level} · {probe.depthM.toFixed(1)} m</span>
+      </div>
+      <input
+        id="sl-depth-cursor" type="range"
+        min={0} max={probe.levelCount - 1} step={1} value={probe.index}
+        onChange={(e) => setProbeIndex(parseInt(e.target.value, 10))}
+      />
+      <div className={`probe-read${dead ? ' dead' : ''}`}>
+        {dead ? (
+          <span className="why">
+            {probe.belowSeafloor
+              ? 'below the seafloor here'
+              : `no value — past the ${dataset.meta.volume.maxDepthM.toFixed(0)} m extent`}
+          </span>
+        ) : (
+          <>
+            <span className="big">{probe.value.toFixed(2)}</span>
+            <span className="unit">{units}</span>
+          </>
+        )}
+      </div>
+      <div className="hint">
+        Level {probe.level} of {probe.levelCount} · ↑ ↓ steps one level.
+        {probe.seafloorM != null && ` Seafloor ${probe.seafloorM.toFixed(0)} m.`}
+      </div>
+    </div>
+  )
+}
 
 // Docked detail for the pinned point (was a slide-in overlay; in a dashboard it
 // belongs in the rail). The headline value comes from the same volume the shader
@@ -13,6 +69,7 @@ export default function InfoPanel({ dataset }) {
   const selected = useVisualizationState((s) => s.selected)
   const clearSelected = useVisualizationState((s) => s.clearSelected)
   const variable = useVisualizationState((s) => s.variable)
+  const probe = useProbe(dataset)
   const [server, setServer] = useState(null)
 
   useEffect(() => {
@@ -74,6 +131,8 @@ export default function InfoPanel({ dataset }) {
             </>
           )}
         </div>
+
+        {probe && <DepthCursor dataset={dataset} probe={probe} />}
 
         {selected.clamped && (
           <div className="hint" style={{ color: 'var(--pin)', marginTop: 9 }}>

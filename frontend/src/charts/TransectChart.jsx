@@ -47,7 +47,7 @@ export default function TransectChart({ dataset }) {
 
   const section = useMemo(
     () => sampleTransect(dataset, Math.round(lat * 24) / 24),   // snap to ~½ cell
-    [dataset, Math.round(lat * 24)],
+    [dataset, Math.round(lat * 24)],   // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   const isos = useMemo(

@@ -4,6 +4,7 @@ import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import DioramaBlock from './DioramaBlock.jsx'
 import PointSelection from '../interaction/PointSelection.jsx'
+import DepthProbe from '../interaction/DepthProbe.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { blockLayout } from './blockLayout.js'
 
@@ -41,16 +42,17 @@ function PickMarker({ point, color, pulse }) {
   )
 }
 
+
 // Publishes the camera, and re-frames the block whenever homeNonce ticks or the
 // block's height changes under the vertical-exaggeration control.
 function CameraBridge({ cameraRef, controlsRef, blockCenterY }) {
-  const { camera } = useThree()
+  const { camera, scene } = useThree()
   const homeOrbit = useVisualizationState((s) => s.homeOrbit)
   const homeNonce = useVisualizationState((s) => s.homeNonce)
 
   useEffect(() => {
     cameraRef.current = camera
-    if (import.meta.env.DEV) window.__oceanCamera = camera
+    if (import.meta.env.DEV) { window.__oceanCamera = camera; window.__oceanScene = scene }
   }, [camera, cameraRef])
 
   useEffect(() => {
@@ -87,7 +89,7 @@ export default function OceanScene({ dataset, cameraRef }) {
   return (
     <Canvas
       camera={{ position: [190, 110, 227], fov: 42, near: 1, far: 3000 }}
-      gl={{ antialias: true, powerPreference: 'high-performance' }}
+      gl={{ antialias: true, powerPreference: 'high-performance'  }}
       dpr={[1, 1.75]}
     >
       <CameraBridge cameraRef={cameraRef} controlsRef={controlsRef} blockCenterY={centerY} />
@@ -101,6 +103,7 @@ export default function OceanScene({ dataset, cameraRef }) {
       <PickMarker point={hover} color="#4fc3f7" pulse={false} />
       <PickMarker point={selected} color="#ffc46b" pulse />
 
+      <DepthProbe dataset={dataset} />
       <PointSelection dataset={dataset} blockRef={blockRef} />
 
       {/* Orbit-only: this is a bounded object you walk around, not a space you

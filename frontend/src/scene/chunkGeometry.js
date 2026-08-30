@@ -197,6 +197,7 @@ export function ruggedChunk(w, d, topY, botY, seed = 0) {
   return g
 }
 
+
 // The knife edges, drawn crisply so the cut reads as deliberate against the
 // torn shell — the whole point of the sliced-tennis-ball silhouette.
 export function cutOutline(w, d, topY, botY) {

@@ -79,6 +79,7 @@ export default function Minimap({ dataset, cameraRef }) {
   const boxRef = useRef(null)
   boxRef.current = box
 
+
   const [size, setSize] = useState({ w: 240, h: 200 })
   const sizeRef = useRef(size)
   sizeRef.current = size
@@ -236,6 +237,7 @@ export default function Minimap({ dataset, cameraRef }) {
         c.fillStyle = '#ffc46b'
         c.beginPath(); c.arc(sx, sy, 1.7 * dpr, 0, Math.PI * 2); c.fill()
       }
+
 
       // the rectangle being drawn
       const b = boxRef.current

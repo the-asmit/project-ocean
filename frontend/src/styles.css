@@ -205,19 +205,6 @@ canvas { display: block; touch-action: none; }
 .ibtn:disabled { color: var(--ink-4); cursor: not-allowed; }
 
 /* segmented control ------------------------------------------------------ */
-.seg {
-  display: flex; gap: 1px; background: var(--line);
-  border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
-}
-.seg button {
-  flex: 1 1 0; min-width: 0; padding: 6px 4px;
-  font-family: var(--mono); font-size: 10px; letter-spacing: .05em;
-  color: var(--ink-3); background: var(--s-2); border: none; cursor: pointer;
-  transition: background .15s var(--ease), color .15s var(--ease);
-}
-.seg button:hover:not(:disabled) { background: var(--s-3); color: var(--ink); }
-.seg button.on { background: var(--accent-dim); color: var(--accent); }
-.seg button:disabled { color: var(--ink-4); cursor: not-allowed; background: var(--s-2); }
 
 /* layer / variable list -------------------------------------------------- */
 .layers { display: flex; flex-direction: column; gap: 1px; }
@@ -360,6 +347,45 @@ kbd {
 .scene-legend i { box-shadow: 0 0 0 1px rgba(255,255,255,.12); }
 .scene-legend i { width: 6px; height: 6px; border-radius: 50%; display: block; }
 
+
+/* depth cursor, in the pinned-point panel -------------------------------- */
+/* Sits inside the "Pinned point" panel and its readout is already amber, so
+   the tie to the pin needs no further marking — a hairline like every other
+   surface in the rail. */
+.probe {
+  margin-top: 11px; padding: 9px 10px 10px;
+  background: var(--s-1); border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.probe .srow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.probe input[type=range] { width: 100%; margin: 7px 0 4px; }
+.probe-read { display: flex; align-items: baseline; gap: 5px; min-height: 21px; }
+.probe-read .big {
+  font-family: var(--mono); font-size: 17px; color: var(--pin);
+  font-variant-numeric: tabular-nums; line-height: 1.15;
+}
+.probe-read .unit { font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
+.probe-read .why { font-size: 10.5px; color: var(--ink-3); font-style: italic; }
+.probe .hint { margin-top: 5px; }
+
+/* what the cut top face is, stated on the canvas ------------------------- */
+.section-badge {
+  position: absolute; left: 10px; top: 9px; z-index: 6; pointer-events: none;
+  padding: 7px 10px 8px;
+  background: rgba(8, 12, 18, .88);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r);
+  font-family: var(--mono); letter-spacing: .05em;
+}
+.section-badge .t { font-size: 8.5px; color: var(--ink-3); text-transform: uppercase; }
+.section-badge .d {
+  font-size: 15px; color: var(--accent); font-weight: 500;
+  font-variant-numeric: tabular-nums; margin: 1px 0 3px;
+}
+.section-badge .s { font-size: 9px; color: var(--ink-3); line-height: 1.5; }
+.section-badge.void { border-color: var(--line-2); }
+.section-badge.void .d { color: var(--ink-2); }
+
 /* fullscreen deep-dive */
 .scene-panel.expanded {
   position: fixed; inset: 0; z-index: 60; grid-column: auto; grid-row: auto;
@@ -422,6 +448,7 @@ kbd {
   box-shadow: 0 4px 14px -4px rgba(0, 0, 0, .6);
 }
 .hud-card .k { color: var(--ink-3); }
+.hud-card .src { font-size: 9px; letter-spacing: .06em; margin-top: 2px; opacity: .85; }
 .hud-card .big { font-size: 14px; color: var(--accent); font-weight: 500; }
 .hud-card.pinned { border-color: var(--pin-line); }
 .hud-card.pinned .big { color: var(--pin); }

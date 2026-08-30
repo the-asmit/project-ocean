@@ -275,6 +275,8 @@ vec3 shellRock(vec3 p, vec3 n, out vec3 outNormal) {
 void main() {
   vec3 n = normalize(vNormal);
   vec3 p = vWorldPos;
+
+
   vec3 span = uBoxMax - uBoxMin;
   vec3 uvw01 = clamp((p - uBoxMin) / span, 0.0, 1.0);
 

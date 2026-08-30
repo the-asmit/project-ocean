@@ -16,18 +16,26 @@ import { useVisualizationState } from './state/useVisualizationState.js'
 // lives in the footer now — always on screen, never behind a panel.
 function SourceNote({ dataset }) {
   const showDetail = useVisualizationState((s) => s.showDetail)
+  const clipIndex = useVisualizationState((s) => s.clipIndex)
   const v = dataset.meta.volume
   const curve = dataset.meta.bathymetry.depthCurve
+  // Slicing replaces the stylized top face with a real horizontal section, so
+  // the stylized-surface disclosure stops being true the moment the block is
+  // cut. Disclosing something that isn't on screen is as wrong as failing to
+  // disclose something that is.
+  const sliced = clipIndex > 0
   return (
     <>
       <span className="src">
         <b>SOURCE</b>&ensp;{v.variableLabel} and seafloor: real {v.source} / Copernicus Marine
       </span>
       <span className="dot">·</span>
-      <span className={showDetail ? 'synth' : undefined}>
-        {showDetail
-          ? 'Block top face is STYLIZED shading, not imagery — cut faces are real data'
-          : 'Stylized top face OFF — every rendered face is data'}
+      <span className={showDetail && !sliced ? 'synth' : undefined}>
+        {sliced
+          ? 'Sliced — top face is a REAL horizontal section, stylized surface removed'
+          : showDetail
+            ? 'Block top face is STYLIZED shading, not imagery — cut faces are real data'
+            : 'Stylized top face OFF — every rendered face is data'}
       </span>
       <span className="dot">·</span>
       <span>1/12° ≈ 9 km grid</span>

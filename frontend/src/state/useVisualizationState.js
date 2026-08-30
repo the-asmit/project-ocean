@@ -10,7 +10,11 @@ export const useVisualizationState = create((set) => ({
   // A region is either a named tile or `bbox:lonMin,lonMax,latMin,latMax`.
   // World coordinates mean something different in every tile, so any pin or
   // hover from the old one has to go.
-  setRegion: (region) => set({ region, selected: null, hover: null }),
+  // The slice resets too: level counts and seafloor depth differ per tile, so
+  // an index from the old one would point at a different depth in the new one.
+  setRegion: (region) =>
+    set({ region, selected: null, hover: null, depthClip: 0, clipIndex: 0,
+         }),
 
   // True while a tile is being fetched/derived. The previously loaded dataset
   // stays on screen underneath — a frozen block with no feedback is worse than
@@ -26,6 +30,11 @@ export const useVisualizationState = create((set) => ({
 
   // --- render controls (defaults carried over from the tuned spike) -----
   depthClip: 0,             // world Y; 0 = no clip
+  // The slice snaps to real model levels, so the INDEX is what the UI drives
+  // and depthClip is derived from it. Keeping both avoids round-tripping a
+  // float back through the depth curve to work out which level we are on.
+  clipIndex: 0,             // 0 = no slice, else 1-based index into sliceStops
+  sliceExtended: false,     // allow slicing below the variable's depth extent
   density: 0.022,           // Beer-Lambert extinction per world unit
   // The diorama needs real vertical presence (at 1x a 600 km x 3.5 km tile is a
   // pancake) without becoming a cube. 8x reads as a wide slab and still leaves
@@ -34,6 +43,8 @@ export const useVisualizationState = create((set) => ({
   showContours: true,       // isotherm contour lines on the cut faces
   showDetail: true,         // synthetic sub-grid seafloor texture (P3)
   setDepthClip: (depthClip) => set({ depthClip }),
+  setSlice: (clipIndex, depthClip) => set({ clipIndex, depthClip }),
+  setSliceExtended: (sliceExtended) => set({ sliceExtended }),
   setDensity: (density) => set({ density }),
   setVertExag: (vertExag) => set({ vertExag }),
   setShowDetail: (showDetail) => set({ showDetail }),
@@ -59,6 +70,11 @@ export const useVisualizationState = create((set) => ({
   hover: null,              // { world:[x,y,z], lat, lon, depthM, value, kind }
   selected: null,           // same shape, pinned on click
   setHover: (hover) => set({ hover }),
-  setSelected: (selected) => set({ selected }),
-  clearSelected: () => set({ selected: null }),
+  // The depth cursor travels down the pinned column. It starts at the level
+  // nearest the click, so pinning a point never moves the readout off the
+  // depth the user actually aimed at.
+  probeIndex: 0,            // index into the real model levels
+  setProbeIndex: (probeIndex) => set({ probeIndex }),
+  setSelected: (selected, probeIndex = 0) => set({ selected, probeIndex }),
+  clearSelected: () => set({ selected: null, probeIndex: 0 }),
 }))

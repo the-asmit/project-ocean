@@ -49,35 +49,47 @@ export function sampleProfile(dataset, lat, lon) {
   return out
 }
 
-// --- west->east section at one latitude ---------------------------------
-// Returns stations with their full column, plus distance along the section.
-export function sampleTransect(dataset, lat, stations = 68) {
+// --- section along ANY line A -> B ---------------------------------------
+// Stations with their full column, plus distance along the section. A latitude
+// line, a longitude line and a drawn transect are all just endpoint pairs, so
+// there is one sampler for all three rather than a special case per mode.
+export function sampleSection(dataset, a, bEnd, stations = 96) {
   const { map, sampler } = dataset
-  const { lonMin, lonMax } = map
-  const z = map.latToZ(lat)
   const seafloorAt = makeSeafloorAt(dataset)
   const levels = depthAxis(dataset)
-  const kmPerDeg = R_EARTH_KM * Math.cos((lat * Math.PI) / 180)
+
+  // flat-earth over a tile this size; the error at 10 deg is well under a pixel
+  const midLat = ((a.lat + bEnd.lat) / 2) * (Math.PI / 180)
+  const dxKm = (bEnd.lon - a.lon) * R_EARTH_KM * Math.cos(midLat)
+  const dyKm = (bEnd.lat - a.lat) * R_EARTH_KM
+  const lengthKm = Math.hypot(dxKm, dyKm)
 
   const rows = []
   for (let i = 0; i < stations; i++) {
-    const t = i / (stations - 1)
-    const lon = lonMin + t * (lonMax - lonMin)
+    const t = stations === 1 ? 0 : i / (stations - 1)
+    const lat = a.lat + t * (bEnd.lat - a.lat)
+    const lon = a.lon + t * (bEnd.lon - a.lon)
     const x = map.lonToX(lon)
-    const column = levels.map((d) => {
-      const s = sampler(x, map.depthToY(d), z)
-      return s.value
-    })
+    const z = map.latToZ(lat)
+    const column = levels.map((d) => sampler(x, map.depthToY(d), z).value)
     const floor = seafloorAt(x, z)
     rows.push({
-      km: t * (lonMax - lonMin) * kmPerDeg,
+      km: t * lengthKm,
+      lat,
       lon,
       column,
       seafloor: Number.isNaN(floor) ? null : floor,
       land: Number.isNaN(floor),
     })
   }
-  return { rows, levels, lengthKm: (lonMax - lonMin) * kmPerDeg }
+  return { rows, levels, lengthKm, a, b: bEnd }
+}
+
+// West->east section at one latitude — the original transect, now one case of
+// sampleSection rather than its own code path.
+export function sampleTransect(dataset, lat, stations = 68) {
+  const { lonMin, lonMax } = dataset.map
+  return sampleSection(dataset, { lat, lon: lonMin }, { lat, lon: lonMax }, stations)
 }
 
 // Depth of an isotherm along the section: for each station, the shallowest
@@ -121,11 +133,15 @@ export function isothermValues({ rows }, interval) {
 const STOPS = [
   [8, 26, 107], [26, 140, 217], [89, 209, 140], [250, 217, 77], [235, 64, 38],
 ]
-export function rampColor(t) {
+export function rampRGB(t) {
   const u = Math.min(1, Math.max(0, t)) * (STOPS.length - 1)
   const i = Math.min(STOPS.length - 2, Math.floor(u))
   const f = u - i
-  const c = STOPS[i].map((a, k) => Math.round(a + (STOPS[i + 1][k] - a) * f))
+  return STOPS[i].map((a, k) => Math.round(a + (STOPS[i + 1][k] - a) * f))
+}
+export function rampColor(t) {
+  const c = rampRGB(t)
   return `rgb(${c[0]},${c[1]},${c[2]})`
 }
+
 export const RAMP_CSS = `linear-gradient(to top, ${STOPS.map((c) => `rgb(${c.join(',')})`).join(', ')})`
