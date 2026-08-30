@@ -1,0 +1,20 @@
+# Normalise line endings in the repo (LF), regardless of contributor OS.
+# Without this, Windows checkouts produce whole-file CRLF diffs.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary — never touch, never diff
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.nc   binary
+*.bin  binary
+*.woff binary
+*.woff2 binary
+
+# Keep lockfiles out of PR diffs
+package-lock.json  -diff linguist-generated

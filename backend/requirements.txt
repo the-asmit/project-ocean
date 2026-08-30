@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+copernicusmarine>=2.4
+xarray>=2024.7
+netCDF4>=1.7
+numpy>=1.26
+python-dotenv>=1.0

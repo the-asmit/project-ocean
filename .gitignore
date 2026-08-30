@@ -1,0 +1,82 @@
+# ---------------------------------------------------------------------------
+# SECRETS — never commit real credentials.
+# .env.example files ARE tracked (placeholders only).
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+credentials.json
+.copernicusmarine/
+
+# ---------------------------------------------------------------------------
+# Node / frontend
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# Playwright (used by the demo/screenshot scripts)
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# ---------------------------------------------------------------------------
+# Python / backend
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Data cache — regenerated on demand from Copernicus Marine.
+# These are large binaries and are NOT source. `backend/main.py` refetches
+# anything missing, so an empty cache is a valid clean checkout.
+# ---------------------------------------------------------------------------
+backend/cache/raw/
+backend/cache/derived/
+*.nc
+*.nc4
+*.zarr/
+*.grib
+*.grib2
+
+# derived render blobs produced by the adapters
+spike-real-data/public/data/
+spike-real-data/data/
+
+# ---------------------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ---------------------------------------------------------------------------
+# Claude Code local settings (keep shared config, drop personal overrides)
+# ---------------------------------------------------------------------------
+.claude/settings.local.json
