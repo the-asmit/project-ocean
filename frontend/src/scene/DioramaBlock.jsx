@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { blockLayout } from './blockLayout.js'
 import { westStops, westCutForIndex } from './sliceStops.js'
-import { ruggedChunk, cutOutline } from './chunkGeometry.js'
+import { ruggedChunk, cutOutline, chunkGhostOutline } from './chunkGeometry.js'
 
 // ===========================================================================
 // Bounded diorama chunk — a finite display object, not an infinite fog volume.
@@ -440,7 +440,25 @@ export default function DioramaBlock({ dataset, meshRef }) {
     () => cutOutline(spanX, spanZ, L.wallTop - L.centerY, L.geomBot - L.centerY, L.westCut),
     [spanX, spanZ, L.wallTop, L.geomBot, L.centerY, L.westCut],
   )
+  // Ghost of what either slice removed: the silhouette of the UNCUT chunk —
+  // closed top ring, closed base ring, sparse uprights. Purely decorative
+  // lines laid over the working geometry-rebuild slice; it clips nothing and
+  // renders nothing of its own. Depth testing is left ON, so the solid block
+  // hides the part of the outline that still exists and only the missing part
+  // shows — which is exactly the reference the cut needs.
+  const sliceActive = L.westCut > 1e-6 || L.clipNorm > 1e-6
+  const ghost = useMemo(() => {
+    if (!sliceActive) return null
+    const full = ruggedChunk(
+      spanX, spanZ, L.boxMaxY - L.centerY, L.boxMinY - L.centerY, seed, 0,
+    )
+    const outline = chunkGhostOutline(full)
+    full.dispose()          // only its rings were wanted, not its triangles
+    return outline
+  }, [sliceActive, spanX, spanZ, L.boxMaxY, L.boxMinY, L.centerY, seed])
+
   useEffect(() => () => { geom.dispose(); edges.dispose() }, [geom, edges])
+  useEffect(() => () => ghost?.dispose(), [ghost])
 
   return (
     <group position={[0, L.centerY, 0]}>
@@ -454,6 +472,13 @@ export default function DioramaBlock({ dataset, meshRef }) {
           side={THREE.FrontSide}
         />
       </mesh>
+      {ghost && (
+        <lineSegments geometry={ghost} raycast={() => null}>
+          <lineBasicMaterial
+            color="#7d93ad" transparent opacity={0.22} depthWrite={false}
+          />
+        </lineSegments>
+      )}
       <lineSegments geometry={edges} raycast={() => null}>
         <lineBasicMaterial color="#9db4d0" transparent opacity={0.55} />
       </lineSegments>

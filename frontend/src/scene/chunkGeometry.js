@@ -213,7 +213,32 @@ export function ruggedChunk(w, d, topY, botY, seed = 0, westCut = 0) {
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3))
   g.setAttribute('aKind', new THREE.Float32BufferAttribute(kinds, 1))
   g.userData.faceKind = Uint8Array.from(faceKind)
+  // The two closed rings that define the chunk's extent, kept so a ghost
+  // outline can be traced from the real form instead of reverse-engineered out
+  // of the triangle soup with an edge-angle threshold — that also picks up the
+  // base fan's radiating spokes and reads as clutter.
+  g.userData.rings = { top: topRing, bot: botRing }
   g.computeBoundingSphere()
+  return g
+}
+
+// Closed top and bottom rings plus a few uprights — the chunk's silhouette.
+// ~154 segments for the default ring, against ~7800 for a full wireframe.
+export function chunkGhostOutline(geom, uprightEvery = 6) {
+  const rings = geom.userData.rings
+  if (!rings) return new THREE.BufferGeometry()
+  const p = []
+  const loop = (ring) => {
+    for (let i = 0; i < ring.length; i++) {
+      p.push(...ring[i], ...ring[(i + 1) % ring.length])
+    }
+  }
+  loop(rings.top)
+  loop(rings.bot)
+  const n = Math.min(rings.top.length, rings.bot.length)
+  for (let i = 0; i < n; i += uprightEvery) p.push(...rings.top[i], ...rings.bot[i])
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3))
   return g
 }
 
