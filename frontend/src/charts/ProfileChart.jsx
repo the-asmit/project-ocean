@@ -9,6 +9,9 @@ import { useComparison } from '../observations/useObservations.js'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { sampleProfile, makeSeafloorAt, rampColor } from './sampling.js'
 import { useProbe } from '../interaction/useProbe.js'
+import { useCurrentsState, useCurrentsData } from '../currents/useCurrentsState.js'
+import { sampleCurrentProfile, compass } from './currentsSampling.js'
+import SubjectSwitch, { usePanelSubject } from './SubjectSwitch.jsx'
 
 const GRID = '#1e2733'
 const AXIS = '#5a6a80'
@@ -112,6 +115,99 @@ function ComparisonChart({ dataset, cmp }) {
   )
 }
 
+const FLOW = '#a98cf0'
+
+// Direction as a rotated tick on the curve, not a second series: speed is m/s
+// and heading is degrees, so plotting both against one axis would imply a
+// shared scale that does not exist.
+function DirTick({ cx, cy, payload }) {
+  if (cx == null || cy == null || payload.dir == null) return null
+  const a = (payload.dir * Math.PI) / 180      // screen space: +x east, -y north
+  const dx = Math.sin(a) * 5, dy = -Math.cos(a) * 5
+  return (
+    <g>
+      <line x1={cx - dx} y1={cy - dy} x2={cx + dx} y2={cy + dy}
+        stroke={FLOW} strokeWidth={1} strokeOpacity={0.75} />
+      <circle cx={cx + dx} cy={cy + dy} r={1.4} fill={FLOW} />
+    </g>
+  )
+}
+
+function FlowTip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  return (
+    <div className="rc-tip">
+      <div><span className="k">depth </span>{p.depth.toFixed(1)} m</div>
+      <div style={{ color: FLOW }}>{p.speed.toFixed(3)} m/s</div>
+      <div><span className="k">toward </span>{p.dir.toFixed(0)}deg {compass(p.dir)}</div>
+      <div><span className="k">u/v </span>{p.u.toFixed(3)} / {p.v.toFixed(3)}</div>
+    </div>
+  )
+}
+
+// Speed and direction against depth, from the same uo/vo frame the streamlines
+// are traced through.
+function FlowProfile({ dataset, rows, lat, lon, from, frameDate, stale }) {
+  const deepest = rows.length ? rows[rows.length - 1].depth : 0
+  const axisMax = Math.max(60, Math.ceil((deepest * 1.06) / 25) * 25)
+  const hi = rows.length ? Math.max(...rows.map((r) => r.speed)) : 1
+  return (
+    <Panel
+      className="chart-profile"
+      title="Current profile"
+      sub={`${lat.toFixed(2)}°N ${lon.toFixed(2)}°E · ${from}`}
+      tools={<SubjectSwitch />}
+      bodyClass="chart-body"
+      footer={
+        <div className="chart-opts cmp-foot">
+          <span className="key"><i style={{ background: FLOW }} />speed</span>
+          <span>ticks = direction</span>
+          <span className="spacer" />
+          {/* The timeline can be scrubbed away from the tile's own date. Two
+              dates on one screen must never be left to be assumed equal. */}
+          <span className={stale ? 'synth' : undefined}>
+            {stale
+              ? `flow frame ${frameDate} — NOT the ${dataset.meta.date} tile date`
+              : `${frameDate} · GLORYS12V1 uo/vo`}
+          </span>
+        </div>
+      }
+    >
+      {rows.length < 2 ? (
+        <div className="empty">
+          <b>No column here</b>
+          Land, or the seafloor sits above the shallowest model level.
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart layout="vertical" data={rows} margin={{ top: 6, right: 16, bottom: 4, left: 0 }}>
+            <CartesianGrid stroke={GRID} strokeDasharray="2 3" />
+            <XAxis
+              type="number" dataKey="speed" domain={[0, Math.ceil(hi * 20) / 20]}
+              tick={TICK} tickLine={{ stroke: AXIS }} axisLine={{ stroke: AXIS }}
+              tickFormatter={(t) => t.toFixed(2)} height={22}
+              label={{ value: 'speed (m/s)', position: 'insideBottom', offset: -2, fill: '#5a6a80', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
+            />
+            <YAxis
+              dataKey="depth" type="number" domain={[0, axisMax]} width={42} allowDataOverflow
+              tick={TICK} tickLine={{ stroke: AXIS }} axisLine={{ stroke: AXIS }}
+              tickFormatter={(t) => t.toFixed(0)}
+              label={{ value: 'depth (m)', angle: -90, position: 'insideLeft', offset: 14, fill: '#5a6a80', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
+            />
+            <Tooltip content={<FlowTip />} cursor={{ stroke: FLOW, strokeWidth: 1, strokeDasharray: '3 3' }} />
+            <Line
+              type="monotone" dataKey="speed" stroke={FLOW} strokeWidth={1.6}
+              isAnimationActive={false} dot={<DirTick />}
+              activeDot={{ r: 3, fill: FLOW, stroke: '#0e131b', strokeWidth: 1 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </Panel>
+  )
+}
+
 function ProfileTip({ active, payload, units }) {
   if (!active || !payload?.length) return null
   const p = payload[0].payload
@@ -127,6 +223,9 @@ export default function ProfileChart({ dataset }) {
   const selected = useVisualizationState((s) => s.selected)
   const hover = useVisualizationState((s) => s.hover)
   const probe = useProbe(dataset)
+  const subject = usePanelSubject()
+  const curData = useCurrentsData(dataset)
+  const frame = useCurrentsState((s) => s.frame)
   // When a float is selected the panel becomes the model-vs-observation
   // comparison — the PS's headline gap. Same chart, two curves.
   const cmp = useComparison(dataset)
@@ -151,18 +250,57 @@ export default function ProfileChart({ dataset }) {
   const deepest = data.length ? data[data.length - 1].depth : 0
   const axisMax = Math.max(60, Math.ceil((deepest * 1.06) / 25) * 25)
 
+  const flow = useMemo(() => {
+    if (subject !== 'currents' || curData.status !== 'ready') return null
+    const f = curData.frames[Math.min(curData.frames.length - 1, frame)]
+    return sampleCurrentProfile(f, curData.meta, lat, lon)
+  }, [subject, curData, frame, Math.round(lat * 200), Math.round(lon * 200)])
+
   // After every hook: a conditional return above them would change the hook
   // count between renders.
+  //
+  // A selected float outranks the subject switch — it replaces the panel with
+  // the comparison, which is its own subject entirely.
   if (cmp) return <ComparisonChart dataset={dataset} cmp={cmp} />
+  if (subject === 'currents') {
+    if (curData.status !== 'ready') {
+      return (
+        <Panel className="chart-profile" title="Current profile"
+          sub={curData.status === 'error' ? 'unavailable' : 'loading uo/vo ...'}
+          tools={<SubjectSwitch />} bodyClass="chart-body">
+          <div className="empty">
+            <b>{curData.status === 'error' ? 'Currents unavailable' : 'Loading currents'}</b>
+            {curData.status === 'error'
+              ? String(curData.error).slice(0, 140)
+              : 'Fetching the uo/vo frames for this tile.'}
+          </div>
+        </Panel>
+      )
+    }
+    const frameDate = curData.meta.dates[Math.min(curData.meta.dates.length - 1, frame)]
+    return (
+      <FlowProfile
+        dataset={dataset} rows={flow ?? []} lat={lat} lon={lon} from={from}
+        frameDate={frameDate} stale={frameDate !== dataset.meta.date}
+      />
+    )
+  }
 
-  const lo = Math.floor(Math.min(...data.map((d) => d.value), Infinity) - 1)
-  const hi = Math.ceil(Math.max(...data.map((d) => d.value), -Infinity) + 1)
+  // Pad and snap in units of the variable's own contour step rather than whole
+  // units. Half a step is 1 °C for temperature — exactly the old padding — and
+  // 0.25 PSU for salinity, where padding by a whole unit squashed a 2.4-wide
+  // column into a third of the axis.
+  const q = v.contourStep / 2
+  const snapTo = (x, dir) => Number((dir(x / q) * q).toFixed(6))
+  const lo = snapTo(Math.min(...data.map((d) => d.value), Infinity) - q, Math.floor)
+  const hi = snapTo(Math.max(...data.map((d) => d.value), -Infinity) + q, Math.ceil)
 
   return (
     <Panel
       className="chart-profile"
       title="Profile"
       sub={`${lat.toFixed(2)}°N ${lon.toFixed(2)}°E · ${from}`}
+      tools={<SubjectSwitch />}
       bodyClass="chart-body"
     >
       {data.length < 2 ? (
@@ -175,10 +313,13 @@ export default function ProfileChart({ dataset }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart layout="vertical" data={data} margin={{ top: 6, right: 16, bottom: 4, left: 0 }}>
             <CartesianGrid stroke={GRID} strokeDasharray="2 3" />
+            {/* Ticks carry minimal decimals rather than a fixed width: whole
+                degrees on a 23 °C axis, but a narrow salinity tile lands on
+                half-unit ticks that toFixed(0) renders as duplicate labels. */}
             <XAxis
               dataKey="value" type="number" domain={[lo, hi]}
               tick={TICK} tickLine={{ stroke: AXIS }} axisLine={{ stroke: AXIS }}
-              tickFormatter={(t) => t.toFixed(0)} height={22}
+              tickFormatter={(t) => Number(t.toFixed(2)).toString()} height={22}
               label={{ value: `${v.variableLabel.toLowerCase()} (${v.units})`, position: 'insideBottom', offset: -2, fill: '#5a6a80', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
             />
             <YAxis

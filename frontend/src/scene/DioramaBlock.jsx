@@ -382,11 +382,16 @@ export default function DioramaBlock({ dataset, meshRef }) {
   const seed = useMemo(() => chunkSeed(tileKey), [tileKey])
   const v = dataset.meta.volume
 
-  // one contour per 2 °C, expressed in normalised units
-  const contourStep = 2 / (v.valueMax - v.valueMin)
-  // the warmest water in the tile is at the surface, so its normalised value is
-  // the right centre for the surface-shading contrast expansion
-  const surfMid = (v.dataMax - v.valueMin) / (v.valueMax - v.valueMin) - 0.02
+  // Contour interval in the variable's own units, from the manifest: 2 °C for
+  // temperature on every tile, and a per-tile round number for salinity, whose
+  // range is the tile's own.
+  const contourStep = v.contourStep / (v.valueMax - v.valueMin)
+  // The contrast expansion below centres on the SURFACE, which is what the
+  // shader comment has always said it wanted. It used dataMax as a stand-in,
+  // which holds only while the extreme value sits at the surface — true for
+  // temperature (warmest on top), false for salinity, whose surface is the
+  // FRESHEST water: 1.8 PSU from dataMax on the Bay tile, 48% of its span.
+  const surfMid = (v.surfaceMedian - v.valueMin) / (v.valueMax - v.valueMin)
 
   const uniforms = useMemo(
     () => ({

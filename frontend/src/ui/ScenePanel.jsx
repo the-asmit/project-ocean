@@ -6,8 +6,8 @@ import DepthRuler from './DepthRuler.jsx'
 import SectionControls from './SectionControls.jsx'
 import SectionBadge from './SectionBadge.jsx'
 import TimelineControls from './TimelineControls.jsx'
-import { useSpikeState } from '../spike/useSpikeState.js'
-import { SPIKE_LEVELS } from '../spike/syntheticCurrents.js'
+import { useCurrentsState, useCurrentsData } from '../currents/useCurrentsState.js'
+import { IconCheck } from './icons.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { IconExpand, IconCollapse, IconHome } from './icons.jsx'
 
@@ -20,8 +20,11 @@ export default function ScenePanel({ dataset, cameraRef }) {
   const goHome = useVisualizationState((s) => s.goHome)
   const loading = useVisualizationState((s) => s.loading)
   const loadError = useVisualizationState((s) => s.loadError)
-  const showCurrents = useSpikeState((s) => s.showCurrents)
-  const levelIndex = useSpikeState((s) => s.levelIndex)
+  const showCurrents = useCurrentsState((s) => s.showCurrents)
+  const setShowCurrents = useCurrentsState((s) => s.setShowCurrents)
+  const setPanelLayer = useVisualizationState((s) => s.setPanelLayer)
+  const levelIndex = useCurrentsState((s) => s.levelIndex)
+  const currents = useCurrentsData(dataset)
   const m = dataset.meta
   const isBox = String(m.region).startsWith('bbox:')
 
@@ -68,6 +71,22 @@ export default function ScenePanel({ dataset, cameraRef }) {
         {expanded && (
           <div className="scene-controls">
             <SectionControls dataset={dataset} compact />
+            {/* The currents toggle otherwise lives only in the left rail, which
+                this view covers — so the deep-dive could show the flow lines
+                but never turn them on. Same store, so the two stay in step. */}
+            <Panel title="Circulation" sub="GLORYS12V1 uo/vo">
+              <button
+                type="button"
+                className={`layer${showCurrents ? ' on' : ''}`}
+                aria-pressed={showCurrents}
+                onClick={() => { const n = !showCurrents; setShowCurrents(n); setPanelLayer(n ? 'currents' : 'field') }}
+              >
+                <span className="tick"><IconCheck size={9} /></span>
+                <span className="swatch" style={{ background: '#a98cf0' }} />
+                <span className="name">Current flow lines</span>
+                <span className="badge">REAL</span>
+              </button>
+            </Panel>
           </div>
         )}
 
@@ -98,17 +117,25 @@ export default function ScenePanel({ dataset, cameraRef }) {
           <span><i style={{ background: '#2b3038' }} /> below seafloor</span>
         </div>
 
-        {/* SPIKE: fabricated field, said on the canvas itself — a panel badge
-            alone is too easy to miss in a screenshot */}
-        {showCurrents && (
-          <div className="synth-chip">
-            SYNTHETIC FIELD
-            <em>invented currents · {SPIKE_LEVELS[levelIndex].label} · not a model</em>
+        {/* Provenance on the canvas itself, not only in a panel — this said
+            SYNTHETIC FIELD while the spike ran and now names the real source */}
+        {showCurrents && currents.status === 'ready' && (
+          <div className="flow-chip">
+            REAL CURRENTS
+            <em>
+              GLORYS12V1 uo/vo ·{' '}
+              {(() => {
+                const d = currents.meta.depthLevels[
+                  Math.min(currents.meta.depthLevels.length - 1, levelIndex)]
+                // the shallowest model level is 0.49 m; toFixed(0) would call it "0 m"
+                return d < 10 ? d.toFixed(1) : d.toFixed(0)
+              })()} m
+            </em>
           </div>
         )}
 
         <div className="scene-foot">
-          <TimelineControls />
+          <TimelineControls dataset={dataset} />
           <div className="navhint">
             <b>ORBIT</b>&ensp;drag to turn the block&ensp;·&ensp;scroll to zoom&ensp;·&ensp;
             <kbd>H</kbd> reset&ensp;·&ensp;hover a cut face to read&ensp;·&ensp;click to pin

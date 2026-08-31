@@ -1,19 +1,48 @@
 // The isovalue slider's range, from the tile's OWN data.
 //
-// meta.valueMin/valueMax are the fixed colorbar clamp (8-31 degC for thetao),
-// which is deliberately wider than any one tile. Offering the user a value the
-// tile never reaches would hand them an empty surface with nothing to explain
-// it, so the slider is bounded by dataMin/dataMax, rounded outward to a clean
-// half-degree.
+// meta.valueMin/valueMax is the colour clamp. For temperature that is a fixed
+// range wider than any one tile; for salinity it IS the tile's range. Either
+// way the slider must stay inside what the volume can represent, because the
+// RG8 buffer is normalised into that range and clipped there — an isovalue
+// outside it selects nothing however much data sits beyond.
 //
-// The opening value is 20 degC where the tile contains it: D20, the depth of
-// the 20 degC isotherm, is the standard thermocline proxy in this basin and is
-// the value the spec names. Where the tile does not reach it, the midpoint of
-// what it does have.
+// Rounded INWARD to the step. Rounding out put both ends of the slider outside
+// the data: 32.5 on a tile topping out at 32.39 crosses nothing, so the last
+// stop always drew an empty surface. Every reachable position is now strictly
+// inside the field.
+const NICE_STEPS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.5, 1]
+const POSITIONS = 90        // roughly how many stops the slider should offer
+
+// A round step, chosen so the slider has a usable number of positions whatever
+// the variable's span. A fixed 0.25 is right for a 23 °C range and useless for
+// a 3.8 PSU one, which would give 15 stops.
+function niceStep(span) {
+  if (!(span > 0)) return NICE_STEPS[0]
+  const want = span / POSITIONS
+  return NICE_STEPS.reduce((a, b) => (
+    Math.abs(Math.log(b) - Math.log(want)) < Math.abs(Math.log(a) - Math.log(want)) ? b : a
+  ))
+}
+
+// Steps like 0.05 do not survive multiplication cleanly (626 * 0.05 =
+// 31.300000000000004), and that lands on the slider as an unreachable value.
+const snap = (v, step) => Number((Math.round(v / step) * step).toFixed(6))
+
 export function isoRange(dataset) {
-  const { dataMin, dataMax } = dataset.meta.volume
-  const lo = Math.floor(dataMin * 2) / 2
-  const hi = Math.ceil(dataMax * 2) / 2
-  const start = 20 >= lo + 0.5 && 20 <= hi - 0.5 ? 20 : Math.round((lo + hi)) / 2
-  return { lo, hi, step: 0.25, start }
+  const { dataMin, dataMax, valueMin, valueMax, variable } = dataset.meta.volume
+  const lo0 = Math.max(valueMin, dataMin)
+  const hi0 = Math.min(valueMax, dataMax)
+  const step = niceStep(hi0 - lo0)
+
+  const lo = Number((Math.ceil(lo0 / step) * step).toFixed(6))
+  const hi = Number((Math.floor(hi0 / step) * step).toFixed(6))
+
+  // 20 °C is the D20 thermocline proxy the spec names, so temperature opens
+  // there when the tile contains it. Salinity has no equivalent single value
+  // worth privileging — it opens at the middle of what the tile holds.
+  const mid = snap((lo + hi) / 2, step)
+  const start = variable === 'thetao' && 20 >= lo + step * 2 && 20 <= hi - step * 2
+    ? 20
+    : mid
+  return { lo, hi, step, start }
 }

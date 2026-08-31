@@ -4,7 +4,7 @@ import { create } from 'zustand'
 export const useVisualizationState = create((set) => ({
   // --- dataset selection -----------------------------------------------
   region: 'bengal',         // Bay of Bengal, India east coast (has real coastline)
-  date: '2020-01-01',
+  date: '2026-06-11',   // near the end of the GLORYS12V1 archive (to 2026-06-23)
   variable: 'thetao',
   setVariable: (variable) => set({ variable }),
   // A region is either a named tile or `bbox:lonMin,lonMax,latMin,latMax`.
@@ -41,6 +41,21 @@ export const useVisualizationState = create((set) => ({
   // Shared because the expanded 3D view covers the right rail and has to mount
   // its own copy of the section controls; both need to know which is on screen.
   sceneExpanded: false,
+  // Which field the Profile/Transect panels describe.
+  //
+  // Location and subject are separate questions: hover/pin choose WHERE, this
+  // chooses WHAT. Pinning deliberately does NOT set it — otherwise choosing a
+  // location to inspect currents at would itself snap the panel back to the
+  // scalar field, and the two gestures would fight.
+  //
+  // Set automatically by explicit layer gestures (turning currents on/off,
+  // touching the timeline, moving a slice slider) and overridable by hand from
+  // the switcher in the panel header. A float selection outranks it entirely.
+  //
+  // 'field' is whichever SCALAR variable is loaded, not temperature
+  // specifically — it was named 'temperature' when thetao was the only one.
+  panelLayer: 'field',         // 'field' | 'currents'
+  setPanelLayer: (panelLayer) => set({ panelLayer }),
   // in-situ observations (mock source for now — see ObservationSource.js)
   showArgo: true,
   selectedFloatId: null,
@@ -101,6 +116,16 @@ export const useVisualizationState = create((set) => ({
   // depth the user actually aimed at.
   probeIndex: 0,            // index into the real model levels
   setProbeIndex: (probeIndex) => set({ probeIndex }),
-  setSelected: (selected, probeIndex = 0) => set({ selected, probeIndex }),
+  // Pinning a point clears any selected float, the mirror of setSelectedFloat
+  // clearing the pin. The profile panel shows ONE subject; without this, a pin
+  // set after a float selection left the InfoPanel reading the new point while
+  // the chart still showed the old float comparison.
+  setSelected: (selected, probeIndex = 0) =>
+    set({ selected, probeIndex, selectedFloatId: null }),
   clearSelected: () => set({ selected: null, probeIndex: 0, selectedFloatId: null }),
 }))
+
+// The live store, for tests and the console. A dynamic import() of this module
+// from a test can resolve to a SECOND instance with pristine defaults, which
+// reads as "nothing changed" no matter what the app is actually doing.
+if (import.meta.env.DEV) window.__store = useVisualizationState

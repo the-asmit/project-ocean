@@ -18,8 +18,8 @@ export default function RenderControls({ dataset }) {
       <Panel title="View" sub="orbit">
         <p className="hint" style={{ margin: '0 0 11px' }}>
           <IconOrbit size={11} style={{ verticalAlign: -1, marginRight: 6 }} />
-          Drag to turn the block · scroll to zoom. Free-fly moves to the
-          fullscreen deep-dive.
+          Drag to turn the block · scroll to zoom. The expand icon opens the
+          same view fullscreen, with these controls alongside it.
         </p>
         <button type="button" className="btn" onClick={goHome}>
           <IconHome size={12} /> Reset view <kbd>H</kbd>

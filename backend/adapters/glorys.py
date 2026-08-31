@@ -4,8 +4,11 @@ GLORYS adapter — Copernicus Marine subset + volume-texture derivation.
 Graduated from spike-real-data/adapt.py. Verified dataset facts (P7, do not
 re-guess): dims (time, depth, latitude, longitude); lat & lon ascending, uniform
 1/12 deg; depth ascending, `positive: down`, NON-uniform (1 m -> 74 m steps);
-thetao in degrees C, packed int16, fill decoded to NaN by xarray; NaN means land
-AND below-seafloor, undifferentiated.
+thetao in degrees C and so in practical salinity (CF units attribute `1e-3`),
+both packed int16, fill decoded to NaN by xarray; NaN means land AND
+below-seafloor, undifferentiated. Verified 2026-08-31: so shares thetao's grid
+exactly — identical depth/lat/lon arrays and a bit-identical NaN mask — so a
+variable switch never invalidates a slice, a pin or a probe index.
 
 Two proven pieces carried forward:
   * VALIDITY CHANNEL — the field texture is RG8: R = normalised value, G = 0/1
@@ -27,17 +30,74 @@ from .bathymetry import BOX_DEPTH, ynorm_to_depth
 DATASET_ID = "cmems_mod_glo_phy_my_0.083deg_P1D-m"
 SOURCE_NAME = "GLORYS12V1"
 
-# Variables the UI may offer. Only `thetao` is wired to real data today.
+# Variables the UI may offer.
+#
+# RANGE MODE is per variable, and the difference is physical, not cosmetic.
+#
+#   "fixed" — one clamp for every tile, so a colour means the same value
+#     everywhere. Works for temperature because its range inside ANY tile is set
+#     by the vertical thermocline, which every tile has: measured across the
+#     Bay of Bengal, the head of the Bay and the Arabian Sea on 2026-06-11, the
+#     within-tile span was 19.9-23.1 degC against a between-tile spread of ~24,
+#     and [8, 33] covers all three using 79.5-92.2% of the ramp.
+#
+#   "tile" — the clamp is the tile's own min/max. Salinity needs this. Its
+#     range is set by GEOGRAPHY (river plume vs evaporative basin), which is
+#     nearly flat within a tile and enormous between them: within-tile span
+#     1.4-3.8 against a between-tile spread of 27.3 (9.40 PSU in the
+#     Ganges-Brahmaputra plume, 36.69 in the Arabian Sea). No fixed clamp
+#     survives that. One covering the domain renders the Bay tile in 13.5% of
+#     the ramp and the Arabian Sea in 5.1% — both a single flat colour; one
+#     tuned to the Bay clips 92.8% of an Arabian Sea tile to ramp-max.
+#     Per-tile min/max gives 94.8-98.6% of the ramp and clips NOTHING.
+#
+# The cost is real and must be disclosed in the UI, not buried: with "tile",
+# the same colour on two different tiles is not the same salinity.
 VARIABLES = {
     "thetao": {
         "label": "Temperature",
+        "short": "Temp",
         "units": "°C",
         "available": True,
-        "range": [8.0, 31.0],   # fixed colour-ramp range so tiles are comparable
+        "rangeMode": "fixed",
+        # 31 was set from a January tile and the June pre-monsoon surface
+        # reaches 32.4 degC, which clipped 1.6% of cells to flat ramp-max and
+        # put part of the field outside what an isovalue could even select. A
+        # fixed range only works if it actually contains the data.
+        "range": [8.0, 33.0],
+        "contourStep": 2.0,          # one isotherm per 2 degC, every tile
     },
-    "so": {"label": "Salinity", "units": "PSU", "available": False, "range": [32.0, 37.0]},
-    "uo": {"label": "Currents", "units": "m/s", "available": False, "range": [-1.5, 1.5]},
+    "so": {
+        "label": "Salinity",
+        "short": "Salinity",
+        "units": "PSU",              # conventional display; see unitsAttr
+        # The CF attribute on the variable is "1e-3" (dimensionless practical
+        # salinity). PSU is what an oceanographer reads, so PSU is what is
+        # shown, and the raw attribute is carried through for provenance.
+        "unitsAttr": "1e-3",
+        "available": True,
+        "rangeMode": "tile",
+        "contourStep": None,         # derived per tile — see _nice_step
+    },
+    "uo": {
+        "label": "Currents", "short": "Flow", "units": "m/s", "available": False,
+        "rangeMode": "fixed", "range": [-1.5, 1.5], "contourStep": 0.5,
+    },
 }
+
+# Contour intervals come off a ladder of round numbers so the legend always
+# reads as a quantity a person would choose. A fixed interval cannot work for a
+# per-tile range: 0.25 PSU is 15 lines on the Bay tile and 100 on a plume tile.
+NICE_STEPS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
+
+
+def _nice_step(span: float, target: int = 10) -> float:
+    """The ladder value giving closest to `target` contours across `span`."""
+    if not np.isfinite(span) or span <= 0:
+        return NICE_STEPS[0]
+    want = span / target
+    return min(NICE_STEPS, key=lambda s: abs(np.log(s) - np.log(want)))
+
 
 LUT_N = 128
 
@@ -104,9 +164,32 @@ def build(nc_path, variable: str, bathy_max_m: float) -> dict:
     H, D, W = da.shape
     max_depth_m = float(depth[-1])
 
-    vmin, vmax = VARIABLES[variable]["range"]
+    spec = VARIABLES[variable]
     raw = da.values.astype("float64")                 # NaN = land / below seafloor
     valid = np.isfinite(raw)
+    if not valid.any():
+        raise ValueError(f"{variable}: tile has no valid cells")
+    data_min, data_max = float(np.nanmin(raw)), float(np.nanmax(raw))
+
+    if spec["rangeMode"] == "tile":
+        # The tile's own extent, snapped OUTWARD to a quarter unit so the
+        # colorbar ticks are round and nothing is ever clipped.
+        vmin = float(np.floor(data_min * 4) / 4)
+        vmax = float(np.ceil(data_max * 4) / 4)
+        if vmax - vmin < 0.25:                        # a near-uniform tile
+            vmin, vmax = vmin - 0.125, vmax + 0.125
+    else:
+        vmin, vmax = spec["range"]
+
+    contour_step = spec["contourStep"] or _nice_step(vmax - vmin)
+
+    # The stylized top face expands contrast around the SURFACE value, so it
+    # needs the surface, not the extreme. For thetao the two nearly coincide
+    # (warmest water is at the top); for so they do not — the surface is the
+    # FRESHEST water, 1.82 PSU from dataMax on the Bay tile, 48% of its whole
+    # span — and centring on dataMax renders the lid flat.
+    surf = raw[0][np.isfinite(raw[0])]
+    surface_median = float(np.median(surf)) if surf.size else float(np.median(raw[valid]))
 
     norm = np.clip((raw - vmin) / (vmax - vmin), 0.0, 1.0)
     # dilate-fill in (lon, level, lat) order, then transpose to (lat, level, lon)
@@ -144,10 +227,15 @@ def build(nc_path, variable: str, bathy_max_m: float) -> dict:
             "W": W, "H": H_TEX, "D": D,
             "levelsReal": H,
             "variable": variable,
-            "variableLabel": VARIABLES[variable]["label"],
-            "units": VARIABLES[variable]["units"],
+            "variableLabel": spec["label"],
+            "variableShort": spec["short"],
+            "units": spec["units"],
+            "unitsAttr": spec.get("unitsAttr"),
             "valueMin": vmin, "valueMax": vmax,
-            "dataMin": float(np.nanmin(raw)), "dataMax": float(np.nanmax(raw)),
+            "rangeMode": spec["rangeMode"],
+            "contourStep": float(contour_step),
+            "dataMin": data_min, "dataMax": data_max,
+            "surfaceMedian": surface_median,
             "maxDepthM": max_depth_m,
             "depthLevels": [float(x) for x in depth],
             "depthLUT": lut,
@@ -192,3 +280,102 @@ def sample_point(nc_path, variable: str, lat_q: float, lon_q: float, depth_q: fl
         "gridLat": float(lat[j]), "gridLon": float(lon[i]),
         "interpolated": bool(m.all()),
     }
+
+
+# --------------------------------------------------------------------------
+# currents (uo/vo) — a VECTOR pair, not a scalar field
+# --------------------------------------------------------------------------
+# Deliberately NOT the RG8 path above. That encoding exists so a scalar can be
+# a GPU texture with a validity channel; currents are integrated on the CPU by
+# the streamline tracer, with no shader in the path, so 8-bit quantisation
+# would buy nothing and RK2 compounds per-step error over ~34 steps. Measured
+# on the Bengal tile, +/-1.5 m/s gives only ~21 codes across the median speed.
+#
+# float32 with NaN preserved as the mask. No dilate-fill: an invented velocity
+# at a coastline would bend a streamline into the land rather than stop it, so
+# the tracer must be able to SEE the boundary. NaN is that signal.
+CURRENT_VARS = ("uo", "vo")
+
+
+def build_currents(nc_paths, dates, max_depth_m: float = 500.0) -> dict:
+    """Merge GLORYS uo/vo tiles into one float32 field per date.
+
+    Layout per date: (levels, lat, lon, 2) C-order, [..., 0] = u, [..., 1] = v,
+    metres/second, NaN where land or below seafloor.
+    """
+    ds = xr.open_mfdataset([str(p) for p in nc_paths], combine="by_coords",
+                           decode_timedelta=True) if len(nc_paths) > 1 \
+        else xr.open_dataset(str(nc_paths[0]), decode_timedelta=True)
+    ds = ds.sortby("time")
+
+    have = np.datetime_as_string(ds["time"].values, unit="D").tolist()
+    missing = [d for d in dates if d not in have]
+    if missing:
+        raise ValueError(f"dates absent from the fetched tiles: {missing}")
+
+    depth = ds["depth"].values.astype("float64")
+    keep = depth <= max_depth_m + 1e-6
+    depth = depth[keep]
+    lat = ds["latitude"].values.astype("float64")
+    lon = ds["longitude"].values.astype("float64")
+
+    fields, stats = {}, []
+    for d in dates:
+        t = have.index(d)
+        u = ds["uo"].isel(time=t).values[keep].astype("float32")
+        v = ds["vo"].isel(time=t).values[keep].astype("float32")
+        assert u.shape == (len(depth), len(lat), len(lon)), u.shape
+        arr = np.empty((*u.shape, 2), "float32")
+        arr[..., 0] = u
+        arr[..., 1] = v
+        fields[d] = np.ascontiguousarray(arr)
+        sp = np.sqrt(u.astype("float64") ** 2 + v.astype("float64") ** 2)
+        stats.append(sp[np.isfinite(sp)])
+
+    allsp = np.concatenate(stats)
+    return {
+        "fields": fields,
+        "meta": {
+            "dates": list(dates),
+            "W": len(lon), "D": len(lat), "levels": len(depth),
+            "depthLevels": [float(x) for x in depth],
+            "lonMin": float(lon[0]), "lonMax": float(lon[-1]),
+            "latMin": float(lat[0]), "latMax": float(lat[-1]),
+            "units": "m/s",
+            "variables": list(CURRENT_VARS),
+            "source": SOURCE_NAME,
+            "datasetId": DATASET_ID,
+            "validFraction": float(np.isfinite(stats[0]).size / (len(depth) * len(lat) * len(lon))),
+            "speedMean": float(allsp.mean()),
+            "speedMedian": float(np.median(allsp)),
+            "speedP99": float(np.percentile(allsp, 99)),
+            "speedMax": float(allsp.max()),
+        },
+    }
+
+
+def fetch_subset_range(bbox: dict, date_from: str, date_to: str, variables: list,
+                       out_nc, username: str, password: str,
+                       max_depth_m: float = 500.0):
+    """Multi-date, multi-variable subset in ONE call.
+
+    fetch_subset() above passes a single variable and the same date twice; the
+    Copernicus API takes a list and a real range, which is how the whole
+    animation window and both current components arrive as one request instead
+    of 16. Measured on the Bengal tile: 8 dates x uo,vo = 40 s, 4.7 MB.
+    """
+    import copernicusmarine
+    out_nc = str(out_nc)
+    copernicusmarine.subset(
+        dataset_id=DATASET_ID,
+        variables=list(variables),
+        start_datetime=f"{date_from}T00:00:00",
+        end_datetime=f"{date_to}T00:00:00",
+        minimum_depth=0, maximum_depth=max_depth_m,
+        output_directory=out_nc.rsplit("/", 1)[0] if "/" in out_nc else ".",
+        output_filename=out_nc.rsplit("/", 1)[-1],
+        overwrite=True, username=username, password=password,
+        minimum_longitude=bbox["lon_min"], maximum_longitude=bbox["lon_max"],
+        minimum_latitude=bbox["lat_min"], maximum_latitude=bbox["lat_max"],
+    )
+    return out_nc

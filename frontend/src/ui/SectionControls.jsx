@@ -5,6 +5,7 @@ import { sliceStops, clipYForIndex, stopAt, westStops } from '../scene/sliceStop
 import { isoRange } from '../scene/isoRange.js'
 import { IconCheck } from './icons.jsx'
 import { rampColor } from '../charts/sampling.js'
+import { contourName, fmtStep } from './variableTerms.js'
 
 // The two slice controls and their companions, in ONE component.
 //
@@ -37,6 +38,7 @@ export default function SectionControls({ dataset, compact = false }) {
   const s = useVisualizationState()
   const { bathyMaxM, depthCurve } = dataset.meta.bathymetry
   const maxDataM = dataset.meta.volume.maxDepthM
+  const vol = dataset.meta.volume
 
   // Every slider position lands on a depth the model actually carries, unless
   // the user has opted into the abyss below the variable's extent.
@@ -48,6 +50,7 @@ export default function SectionControls({ dataset, compact = false }) {
   const setIndex = (i) => {
     const n = Math.round(Math.min(stops.length, Math.max(0, i)))
     s.setSlice(n, clipYForIndex(dataset, stops, n))
+    s.setPanelLayer('field')           // cutting the block reads the scalar field
   }
 
   // Step the slice a level at a time without having to focus the slider first.
@@ -67,8 +70,10 @@ export default function SectionControls({ dataset, compact = false }) {
   // The west-east cut, the same pattern one axis over.
   const wStops = useMemo(() => westStops(dataset), [dataset])
   const wStop = s.westIndex > 0 ? wStops[Math.min(wStops.length - 1, s.westIndex - 1)] : null
-  const setWest = (i) =>
+  const setWest = (i) => {
     s.setWestIndex(Math.round(Math.min(wStops.length, Math.max(0, i))))
+    s.setPanelLayer('field')
+  }
   const westLabel = wStop ? `${wStop.lon.toFixed(2)}°E` : 'off'
 
   // The isovalue range comes from THIS tile's own data, not the fixed 8-31
@@ -146,8 +151,8 @@ export default function SectionControls({ dataset, compact = false }) {
           onClick={() => s.setShowContours(!s.showContours)}
         >
           <span className="tick"><IconCheck size={9} /></span>
-          <span className="name">Isotherm contours</span>
-          <span className="badge">2 °C</span>
+          <span className="name">{contourName(vol.variable)} contours</span>
+          <span className="badge">{fmtStep(vol.contourStep)} {vol.units}</span>
         </button>
       </div>
 

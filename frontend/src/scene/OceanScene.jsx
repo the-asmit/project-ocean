@@ -7,7 +7,7 @@ import PointSelection from '../interaction/PointSelection.jsx'
 import DepthProbe from '../interaction/DepthProbe.jsx'
 import ObservationMarkers from './ObservationMarkers.jsx'
 import Isosurface from './Isosurface.jsx'
-import CurrentStreamlines from '../spike/CurrentStreamlines.jsx'
+import CurrentStreamlines from '../currents/CurrentStreamlines.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { blockLayout } from './blockLayout.js'
 
@@ -89,7 +89,6 @@ export default function OceanScene({ dataset, cameraRef }) {
   const L = blockLayout(dataset, vertExag, depthClip)
   const reach = Math.max(L.spanX, L.spanZ)
   const centerY = L.centerY
-
   return (
     <Canvas
       camera={{ position: [190, 110, 227], fov: 42, near: 1, far: 3000 }}

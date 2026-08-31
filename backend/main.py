@@ -19,6 +19,7 @@ Cache layout:
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import pathlib
@@ -75,7 +76,11 @@ REGIONS = {
         "lon_min": 79.5, "lon_max": 85.5, "lat_min": 12.0, "lat_max": 18.0,
     },
 }
-DEFAULT_DATE = "2020-01-01"
+# The demo date. GLORYS12V1 reanalysis runs 1993-01-01 -> 2026-06-23 (verified
+# against the store's own time axis, not the catalogue), so this sits a few
+# days inside the archive edge rather than on it — dates at the very end are
+# occasionally revised. The currents window runs DEFAULT_DATE + 8 days.
+DEFAULT_DATE = "2026-06-11"
 
 # Wide bathymetry-only tile the client draws the region picker on. No volume is
 # ever built for it — the minimap needs land/depth and nothing else.
@@ -217,6 +222,64 @@ def _volume_dir(region: str, date: str, variable: str) -> pathlib.Path:
     return out
 
 
+CURRENT_DAYS = 8          # animation frames; one GLORYS day each
+
+
+def _current_dates(date: str, days: int = CURRENT_DAYS) -> list[str]:
+    d0 = datetime.date.fromisoformat(date)
+    return [(d0 + datetime.timedelta(days=i)).isoformat() for i in range(days)]
+
+
+def _nc_covers(path: pathlib.Path, dates: list[str]) -> bool:
+    """Does this raw tile's filename span any of `dates`?
+
+    Names are cur_<region>_<date>.nc or cur_<region>_<from>_<to>.nc, so the
+    range is readable without opening the file — worth it because opening every
+    candidate is what this check exists to avoid.
+    """
+    parts = path.stem.split("_")
+    stamps = [p for p in parts if len(p) == 10 and p[4] == "-" and p[7] == "-"]
+    if not stamps:
+        return False
+    lo, hi = stamps[0], stamps[-1]
+    return any(lo <= d <= hi for d in dates)
+
+
+def _currents_dir(region: str, date: str, days: int = CURRENT_DAYS) -> pathlib.Path:
+    """Real uo/vo for `days` consecutive dates, as float32 with NaN as the mask.
+
+    Same region+date cache keying as _volume_dir, but a separate product: uo/vo
+    are a VECTOR pair and never go through the scalar RG8 path or the variable
+    picker. One Copernicus call covers the whole range and both components.
+    """
+    dates = _current_dates(date, days)
+    key = f"cur_{_slug(region)}_{date}_{days}d"
+    out = DERIVED / key
+    with _lock(key):
+        if (out / "meta.json").exists():
+            return out
+        # Only the tiles that actually overlap this window. The bare
+        # `cur_<region>_*.nc` glob merged every window ever fetched for the
+        # region — with a January 2020 and a June 2026 file on disk that is one
+        # open_mfdataset across a six-year gap, to read eight days out of it.
+        ncs = [p for p in sorted(RAW.glob(f"cur_{_slug(region)}_*.nc"))
+               if _nc_covers(p, dates)]
+        if not ncs:
+            if not CMEMS_USER:
+                raise HTTPException(503, "CMEMS credentials missing and no cached currents")
+            nc = RAW / f"cur_{_slug(region)}_{dates[0]}_{dates[-1]}.nc"
+            glorys.fetch_subset_range(
+                _region(region), dates[0], dates[-1], list(glorys.CURRENT_VARS),
+                nc, CMEMS_USER, CMEMS_PASS)
+            ncs = [nc]
+        built = glorys.build_currents(ncs, dates)
+        out.mkdir(parents=True, exist_ok=True)
+        for d, arr in built["fields"].items():
+            arr.tofile(out / f"{d}.bin")
+        (out / "meta.json").write_text(json.dumps(built["meta"], indent=2))
+    return out
+
+
 # --------------------------------------------------------------------------
 # routes
 # --------------------------------------------------------------------------
@@ -267,6 +330,23 @@ def dataset(region: str = "coastal", date: str = DEFAULT_DATE, variable: str = "
 def slice_volume(region: str = "coastal", date: str = DEFAULT_DATE, variable: str = "thetao"):
     d = _volume_dir(region, date, variable)
     return _bin(np.fromfile(d / "field.bin", np.uint8), "field.bin")
+
+
+@app.get("/currents/meta")
+def currents_meta(region: str = "coastal", date: str = DEFAULT_DATE):
+    """Manifest for the real current field: dates, grid, levels, speed stats."""
+    return json.loads((_currents_dir(region, date) / "meta.json").read_text())
+
+
+@app.get("/currents/field")
+def currents_field(region: str = "coastal", date: str = DEFAULT_DATE,
+                   frame: str = DEFAULT_DATE):
+    """One date's (levels, lat, lon, 2) float32 field. NaN = land/below floor."""
+    d = _currents_dir(region, date)
+    f = d / f"{frame}.bin"
+    if not f.exists():
+        raise HTTPException(404, f"no current frame for {frame}")
+    return _bin(np.fromfile(f, np.float32), f"{frame}.bin")
 
 
 @app.get("/bathymetry/meta")

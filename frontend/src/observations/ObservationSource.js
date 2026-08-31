@@ -71,6 +71,15 @@ export function mockArgoSource(dataset) {
   const maxDataM = dataset.meta.volume.maxDepthM
   const modelLevels = depthAxis(dataset)
 
+  // The bias and noise below are in the LOADED VARIABLE'S units, so they have
+  // to scale with that variable's range. The numbers were tuned against a
+  // ~23 degC temperature span, where +/-0.4 is a plausible float-vs-model
+  // disagreement. Carried across unscaled to salinity, the same +/-0.4 would be
+  // 0.4 PSU — a tenth of this basin's entire span, and a physically absurd
+  // claim to draw next to a model curve.
+  const { dataMin, dataMax } = dataset.meta.volume
+  const DIST = (dataMax - dataMin) / 23
+
   const floatsFor = () => {
     const rand = rng(hashStr(String(dataset.meta.region) + dataset.meta.date))
     const out = []
@@ -94,7 +103,7 @@ export function mockArgoSource(dataset) {
         platform: 'argo',
         synthetic: true,
         // per-float distortion, fixed at creation so a profile never wobbles
-        bias: (rand() - 0.5) * 0.8,
+        bias: (rand() - 0.5) * 0.8 * DIST,
         shiftM: (rand() - 0.5) * 50,
         seed: Math.floor(rand() * 1e6),
       })
@@ -129,7 +138,7 @@ export function mockArgoSource(dataset) {
         if (s.value == null) break
         levels.push({
           depthM,
-          value: s.value + f.bias + (rand() - 0.5) * 0.12,
+          value: s.value + f.bias + (rand() - 0.5) * 0.12 * DIST,
         })
       }
       return {

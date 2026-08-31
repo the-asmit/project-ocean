@@ -71,9 +71,17 @@ export default function Isosurface({ dataset }) {
     const lift = (ring) => ring.map((q) => [q[0], q[1] + B.centerY, q[2]])
     const shell = { rings: { top: lift(r.top), bot: lift(r.bot) }, topY: B.wallTop, botY: B.geomBot }
     shellGeom.dispose()
-    return isosurfaceGeometry(dataset, {
+    const g = isosurfaceGeometry(dataset, {
       isoValue, yOfDepthM: B.yOfDepthM, iMin, jMin, shell,
     })
+    if (import.meta.env.DEV) {
+      // Every mesh build, in order, so a test can prove a variable switch does
+      // not spend one on an isovalue that belongs to the previous variable.
+      const log = (window.__isoBuilds ||= [])
+      log.push({ variable: dataset.meta.volume.variable, isoValue, triangles: g.triangles })
+      if (log.length > 20) log.shift()      // a ring, not a leak
+    }
+    return g
   }, [show, dataset, tileKey, isoValue, iMin, jMin, depthClip, westCut])
 
   // dispose the geometry the previous build replaced

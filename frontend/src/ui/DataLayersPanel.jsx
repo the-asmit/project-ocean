@@ -1,7 +1,7 @@
 import Panel from './Panel.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { IconCheck } from './icons.jsx'
-import { useSpikeState } from '../spike/useSpikeState.js'
+import { useCurrentsState } from '../currents/useCurrentsState.js'
 
 // Observation networks INCOIS actually operates in this basin. None are wired
 // to a feed yet, so every row says so rather than rendering an empty layer.
@@ -39,8 +39,9 @@ export default function DataLayersPanel({ dataset }) {
   const showArgo = useVisualizationState((s) => s.showArgo)
   const setShowArgo = useVisualizationState((s) => s.setShowArgo)
   const showDetail = useVisualizationState((s) => s.showDetail)
-  const showCurrents = useSpikeState((s) => s.showCurrents)
-  const setShowCurrents = useSpikeState((s) => s.setShowCurrents)
+  const showCurrents = useCurrentsState((s) => s.showCurrents)
+  const setShowCurrents = useCurrentsState((s) => s.setShowCurrents)
+  const setPanelLayer = useVisualizationState((s) => s.setPanelLayer)
   const setShowDetail = useVisualizationState((s) => s.setShowDetail)
   const vars = dataset.meta.variables
 
@@ -50,7 +51,7 @@ export default function DataLayersPanel({ dataset }) {
         <div className="field">
           <span className="lbl">Ocean variables</span>
           <div className="layers">
-            {Object.entries(vars).map(([key, v]) => (
+            {Object.entries(vars).filter(([key]) => key !== 'uo').map(([key, v]) => (
               <Layer
                 key={key}
                 on={variable === key}
@@ -105,23 +106,23 @@ export default function DataLayersPanel({ dataset }) {
         </div>
       </Panel>
 
-      <Panel title="Experimental" sub="mechanism spike">
+      <Panel title="Circulation" sub="GLORYS12V1 uo/vo">
         <div className="layers">
-          {/* Deliberately NOT the Currents variable row above, which is still
-              SOON because uo/vo genuinely are not wired. That row and this one
-              make different claims and must not be collapsed into one. */}
+          {/* uo/vo are a VECTOR pair, so they are not in the scalar variable
+              list above — a colour-ramped velocity volume is a different (and
+              worse) way to show circulation than streamlines. */}
           <Layer
-            on={showCurrents} swatch="#a98cf0" badge="SYNTHETIC"
-            onClick={() => setShowCurrents(!showCurrents)}
-            title="A fabricated current field used to prove the time-animation mechanism before spending a real Copernicus fetch. Not GLORYS and not a model."
+            on={showCurrents} swatch="#a98cf0" badge="REAL"
+            onClick={() => { const n = !showCurrents; setShowCurrents(n); setPanelLayer(n ? 'currents' : 'field') }}
+            title="Measured GLORYS12V1 uo/vo, traced as streamlines. Step or play the dates under the 3D view."
           >
             Current flow lines
           </Layer>
         </div>
         <p className="hint" style={{ margin: '10px 0 0' }}>
-          Invented vectors on a gyre + jet + noise. The scrubber under the 3D
-          view steps fabricated frames — the real date and the temperature
-          volume are untouched.
+          Streamlines through the measured velocity field, one frame per GLORYS
+          day. Lines stop at the coast rather than crossing it — the field is
+          masked there, not filled.
         </p>
       </Panel>
 

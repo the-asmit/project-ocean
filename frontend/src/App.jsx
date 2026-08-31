@@ -10,9 +10,9 @@ import TransectChart from './charts/TransectChart.jsx'
 import ProfileChart from './charts/ProfileChart.jsx'
 import { IconAlert } from './ui/icons.jsx'
 import { loadDataset } from './scene/dataset.js'
+import { isoRange } from './scene/isoRange.js'
 import { useVisualizationState } from './state/useVisualizationState.js'
-import { useSpikeState } from './spike/useSpikeState.js'
-import { frameLabel, SPIKE_LEVELS } from './spike/syntheticCurrents.js'
+import { useCurrentsState, useCurrentsData } from './currents/useCurrentsState.js'
 
 // P3: the synthetic-vs-real disclosure is not optional and not decoration. It
 // lives in the footer now — always on screen, never behind a panel.
@@ -23,9 +23,9 @@ function SourceNote({ dataset }) {
   const showArgo = useVisualizationState((s) => s.showArgo)
   const showIso = useVisualizationState((s) => s.showIso)
   const isoValue = useVisualizationState((s) => s.isoValue)
-  const showCurrents = useSpikeState((s) => s.showCurrents)
-  const frame = useSpikeState((s) => s.frame)
-  const levelIndex = useSpikeState((s) => s.levelIndex)
+  const showCurrents = useCurrentsState((s) => s.showCurrents)
+  const frame = useCurrentsState((s) => s.frame)
+  const currents = useCurrentsData(dataset)
   const v = dataset.meta.volume
   const curve = dataset.meta.bathymetry.depthCurve
   // Slicing replaces the stylized top face with a real horizontal section, so
@@ -41,7 +41,9 @@ function SourceNote({ dataset }) {
   return (
     <>
       <span className="src">
-        <b>SOURCE</b>&ensp;{v.variableLabel} and seafloor: real {v.source} / Copernicus Marine
+        <b>SOURCE</b>&ensp;{v.variableLabel} ({v.variable}
+        {v.unitsAttr ? `, CF units ${v.unitsAttr}` : ''}) and seafloor: real{' '}
+        {v.source} / Copernicus Marine
       </span>
       <span className="dot">·</span>
       <span className={showDetail && !sliced ? 'synth' : undefined}>
@@ -66,14 +68,14 @@ function SourceNote({ dataset }) {
           from the same {v.source} {v.variable} volume
         </span>
       )}
-      {/* SPIKE: the strongest claim on screen has to be the loudest label.
-          This layer is invented outright, so it says so before anything else
-          about it — and it names the frame, which is NOT the real date above. */}
-      {showCurrents && <span className="dot">·</span>}
-      {showCurrents && (
-        <span className="synth-note">
-          Current flow lines SYNTHETIC — invented field, {frameLabel(frame)} is a
-          fabricated frame, not {dataset.meta.date}
+      {/* Real now. The spike's SYNTHETIC warning is gone because the claim it
+          guarded is gone — these are measured uo/vo on the tile's own dates. */}
+      {showCurrents && currents.status === 'ready' && <span className="dot">·</span>}
+      {showCurrents && currents.status === 'ready' && (
+        <span>
+          Flow lines: REAL {currents.meta.source} uo/vo, {currents.meta.dates[
+            Math.min(frame, currents.meta.dates.length - 1)]} — traced through
+          the measured field
         </span>
       )}
       <span className="dot opt">·</span>
@@ -93,16 +95,28 @@ export default function App() {
   const clearSelected = useVisualizationState((s) => s.clearSelected)
   const goHome = useVisualizationState((s) => s.goHome)
   const setLoading = useVisualizationState((s) => s.setLoading)
+  const setIsoValue = useVisualizationState((s) => s.setIsoValue)
   const cameraRef = useRef()
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     loadDataset({ region, date, variable })
-      .then((d) => { if (!cancelled) { setDataset(d); setLoading(false) } })
+      .then((d) => {
+        if (cancelled) return
+        // Re-derive the isovalue for the NEW tile in the SAME commit as the
+        // dataset. 20 is a temperature, not a salinity, and leaving the
+        // correction to the SectionControls effect costs one render in which
+        // the mesher builds an empty surface and immediately throws it away.
+        const r = isoRange(d)
+        const cur = useVisualizationState.getState().isoValue
+        if (!(cur >= r.lo && cur <= r.hi)) setIsoValue(r.start)
+        setDataset(d)
+        setLoading(false)
+      })
       .catch((e) => { if (!cancelled) { setLoadError(String(e)); setLoading(false) } })
     return () => { cancelled = true }
-  }, [region, date, variable, setDataset, setLoadError, setLoading])
+  }, [region, date, variable, setDataset, setLoadError, setLoading, setIsoValue])
 
   useEffect(() => {
     const onKey = (e) => {

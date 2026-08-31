@@ -22,7 +22,7 @@ function project(world, camera, w, h, v) {
   }
 }
 
-function Card({ pt, screen, pinned, box }) {
+function Card({ pt, screen, pinned, box, units, dataset }) {
   const ax = screen.x
   const ay = screen.y
   // flip the leader to the other side when close to the right/top edge of the
@@ -32,9 +32,19 @@ function Card({ pt, screen, pinned, box }) {
   const cx = ax + (flipX ? -OFF_X - 165 : OFF_X)
   const cy = ay + (flipY ? -OFF_Y : OFF_Y)
 
-  const val = pt.value == null
-    ? null
-    : `${pt.value.toFixed(2)}`
+  // Re-read the value from the CURRENT volume rather than trusting the one
+  // captured when the point was picked. A pin survives a variable switch (same
+  // grid, same location — that is the point of it), so a cached number would
+  // keep showing a temperature under a "PSU" label. Position, depth and kind
+  // are geometry and do not change; only the value does.
+  // The Y to sample at is re-derived from the recorded depth, exactly as
+  // PointSelection's readout does it — the raw world Y carries the vertical
+  // exaggeration and the bevel, and feeding it straight back reads as land.
+  const live = pt.value != null && dataset && pt.sampleDepthM != null
+    ? dataset.sampler(pt.world[0], dataset.map.depthToY(pt.sampleDepthM), pt.world[2])
+    : null
+  const shown = live ? (live.valid ? live.value : null) : pt.value
+  const val = shown == null ? null : `${shown.toFixed(2)}`
 
   return (
     <>
@@ -57,7 +67,7 @@ function Card({ pt, screen, pinned, box }) {
           <div className="k">no data — land</div>
         ) : (
           <div>
-            <span className="big">{val}</span> <span className="k">°C</span>
+            <span className="big">{val}</span> <span className="k">{units}</span>
             {pt.clamped && (
               <span className="k"> @ {pt.sampleDepthM.toFixed(0)} m (deepest data)</span>
             )}
@@ -77,6 +87,10 @@ function Card({ pt, screen, pinned, box }) {
 export default function HUDLabel({ cameraRef, hostRef }) {
   const hover = useVisualizationState((s) => s.hover)
   const selected = useVisualizationState((s) => s.selected)
+  // The readout used to print "°C" literally, which silently became a lie the
+  // moment a second variable existed. It comes off the loaded volume now.
+  const units = useVisualizationState((s) => s.dataset?.meta.volume.units ?? '')
+  const dataset = useVisualizationState((s) => s.dataset)
   const [, force] = useState(0)
   const vec = useRef(new THREE.Vector3())
   const raf = useRef(0)
@@ -103,11 +117,11 @@ export default function HUDLabel({ cameraRef, hostRef }) {
   const items = []
   if (selected) {
     const s = project(selected.world, camera, w, h, vec.current)
-    if (!s.behind) items.push(<Card key="sel" pt={selected} screen={s} box={box} pinned />)
+    if (!s.behind) items.push(<Card key="sel" pt={selected} screen={s} box={box} units={units} dataset={dataset} pinned />)
   }
   if (hover && (!selected || hover.world[0] !== selected.world[0])) {
     const s = project(hover.world, camera, w, h, vec.current)
-    if (!s.behind) items.push(<Card key="hov" pt={hover} screen={s} box={box} />)
+    if (!s.behind) items.push(<Card key="hov" pt={hover} screen={s} box={box} units={units} dataset={dataset} />)
   }
 
   return <div className="hud-layer">{items}</div>
