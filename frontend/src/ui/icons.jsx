@@ -83,3 +83,27 @@ export const IconHelp = (p) => (
 export const IconAlert = (p) => (
   <Svg {...p}><path d="M8 2.4 14.6 13.6H1.4z" /><path d="M8 6.6v3.1" /><circle cx="8" cy="11.7" r=".75" fill="currentColor" stroke="none" /></Svg>
 )
+
+// Transport controls for the synthetic time scrubber. Same grid and weight as
+// the rest; play/pause are filled because a transport button reads faster as a
+// solid than as an outline at this size.
+export const IconPlay = (p) => (
+  <Svg {...p}><path d="M5 3.2 12.4 8 5 12.8Z" fill="currentColor" strokeWidth="1.2" /></Svg>
+)
+export const IconPause = (p) => (
+  <Svg {...p}>
+    <path d="M5.6 3.4v9.2M10.4 3.4v9.2" strokeWidth="1.9" />
+  </Svg>
+)
+export const IconPrev = (p) => (
+  <Svg {...p}>
+    <path d="M11.6 3.4 5.6 8l6 4.6Z" fill="currentColor" strokeWidth="1.2" />
+    <path d="M4 3.6v8.8" />
+  </Svg>
+)
+export const IconNext = (p) => (
+  <Svg {...p}>
+    <path d="M4.4 3.4 10.4 8l-6 4.6Z" fill="currentColor" strokeWidth="1.2" />
+    <path d="M12 3.6v8.8" />
+  </Svg>
+)

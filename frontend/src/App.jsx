@@ -11,6 +11,8 @@ import ProfileChart from './charts/ProfileChart.jsx'
 import { IconAlert } from './ui/icons.jsx'
 import { loadDataset } from './scene/dataset.js'
 import { useVisualizationState } from './state/useVisualizationState.js'
+import { useSpikeState } from './spike/useSpikeState.js'
+import { frameLabel, SPIKE_LEVELS } from './spike/syntheticCurrents.js'
 
 // P3: the synthetic-vs-real disclosure is not optional and not decoration. It
 // lives in the footer now — always on screen, never behind a panel.
@@ -21,6 +23,9 @@ function SourceNote({ dataset }) {
   const showArgo = useVisualizationState((s) => s.showArgo)
   const showIso = useVisualizationState((s) => s.showIso)
   const isoValue = useVisualizationState((s) => s.isoValue)
+  const showCurrents = useSpikeState((s) => s.showCurrents)
+  const frame = useSpikeState((s) => s.frame)
+  const levelIndex = useSpikeState((s) => s.levelIndex)
   const v = dataset.meta.volume
   const curve = dataset.meta.bathymetry.depthCurve
   // Slicing replaces the stylized top face with a real horizontal section, so
@@ -57,8 +62,18 @@ function SourceNote({ dataset }) {
       {showIso && <span className="dot">·</span>}
       {showIso && (
         <span>
-          Isosurface — {isoValue.toFixed(2)} {v.units} surface, REAL structure
-          derived from the same {v.source} {v.variable} volume
+          Isosurface {isoValue.toFixed(2)} {v.units} — REAL structure derived
+          from the same {v.source} {v.variable} volume
+        </span>
+      )}
+      {/* SPIKE: the strongest claim on screen has to be the loudest label.
+          This layer is invented outright, so it says so before anything else
+          about it — and it names the frame, which is NOT the real date above. */}
+      {showCurrents && <span className="dot">·</span>}
+      {showCurrents && (
+        <span className="synth-note">
+          Current flow lines SYNTHETIC — invented field, {frameLabel(frame)} is a
+          fabricated frame, not {dataset.meta.date}
         </span>
       )}
       <span className="dot opt">·</span>

@@ -1,6 +1,7 @@
 import Panel from './Panel.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { IconCheck } from './icons.jsx'
+import { useSpikeState } from '../spike/useSpikeState.js'
 
 // Observation networks INCOIS actually operates in this basin. None are wired
 // to a feed yet, so every row says so rather than rendering an empty layer.
@@ -38,6 +39,8 @@ export default function DataLayersPanel({ dataset }) {
   const showArgo = useVisualizationState((s) => s.showArgo)
   const setShowArgo = useVisualizationState((s) => s.setShowArgo)
   const showDetail = useVisualizationState((s) => s.showDetail)
+  const showCurrents = useSpikeState((s) => s.showCurrents)
+  const setShowCurrents = useSpikeState((s) => s.setShowCurrents)
   const setShowDetail = useVisualizationState((s) => s.setShowDetail)
   const vars = dataset.meta.variables
 
@@ -100,6 +103,26 @@ export default function DataLayersPanel({ dataset }) {
             ))}
           </div>
         </div>
+      </Panel>
+
+      <Panel title="Experimental" sub="mechanism spike">
+        <div className="layers">
+          {/* Deliberately NOT the Currents variable row above, which is still
+              SOON because uo/vo genuinely are not wired. That row and this one
+              make different claims and must not be collapsed into one. */}
+          <Layer
+            on={showCurrents} swatch="#a98cf0" badge="SYNTHETIC"
+            onClick={() => setShowCurrents(!showCurrents)}
+            title="A fabricated current field used to prove the time-animation mechanism before spending a real Copernicus fetch. Not GLORYS and not a model."
+          >
+            Current flow lines
+          </Layer>
+        </div>
+        <p className="hint" style={{ margin: '10px 0 0' }}>
+          Invented vectors on a gyre + jet + noise. The scrubber under the 3D
+          view steps fabricated frames — the real date and the temperature
+          volume are untouched.
+        </p>
       </Panel>
 
       <Panel title="Tools">
