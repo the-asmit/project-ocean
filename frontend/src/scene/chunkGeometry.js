@@ -54,6 +54,16 @@ const smooth = (t) => {
   return c * c * (3 - 2 * c)
 }
 
+// The chunk's tear pattern is keyed to the tile: every region gets its own,
+// and the same region always gets the same one. Shared so anything that needs
+// to reason about the shell's extent derives the identical shape rather than
+// its own near-miss.
+export function chunkSeed(tileKey) {
+  let h = 0
+  for (let i = 0; i < tileKey.length; i++) h = (h * 31 + tileKey.charCodeAt(i)) % 9973
+  return (h / 9973) * 40
+}
+
 export const KIND = { SHELL: 0, CUT: 1, TOP: 2, BOTTOM: 3 }
 
 // w, d      footprint spans — aspect-correct, from the region's lat/lon extent

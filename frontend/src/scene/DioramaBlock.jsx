@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { blockLayout } from './blockLayout.js'
 import { westStops, westCutForIndex } from './sliceStops.js'
-import { ruggedChunk, cutOutline, chunkGhostOutline } from './chunkGeometry.js'
+import { ruggedChunk, cutOutline, chunkGhostOutline, chunkSeed } from './chunkGeometry.js'
 
 // ===========================================================================
 // Bounded diorama chunk — a finite display object, not an infinite fog volume.
@@ -379,11 +379,7 @@ export default function DioramaBlock({ dataset, meshRef }) {
   const tileKey = `${dataset.meta.region}|${dataset.meta.date}|${dataset.meta.volume.variable}`
   // Every region gets its own tear pattern, and the same region always gets the
   // same one — a chunk that reshuffled on every re-render would read as noise.
-  const seed = useMemo(() => {
-    let h = 0
-    for (let i = 0; i < tileKey.length; i++) h = (h * 31 + tileKey.charCodeAt(i)) % 9973
-    return (h / 9973) * 40
-  }, [tileKey])
+  const seed = useMemo(() => chunkSeed(tileKey), [tileKey])
   const v = dataset.meta.volume
 
   // one contour per 2 °C, expressed in normalised units

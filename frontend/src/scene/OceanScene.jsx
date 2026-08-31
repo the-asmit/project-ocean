@@ -5,6 +5,8 @@ import * as THREE from 'three'
 import DioramaBlock from './DioramaBlock.jsx'
 import PointSelection from '../interaction/PointSelection.jsx'
 import DepthProbe from '../interaction/DepthProbe.jsx'
+import ObservationMarkers from './ObservationMarkers.jsx'
+import Isosurface from './Isosurface.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { blockLayout } from './blockLayout.js'
 
@@ -80,6 +82,7 @@ export default function OceanScene({ dataset, cameraRef }) {
   const depthClip = useVisualizationState((s) => s.depthClip)
   const homeOrbit = useVisualizationState((s) => s.homeOrbit)
   const blockRef = useRef()
+  const floatsRef = useRef()
   const controlsRef = useRef()
 
   const L = blockLayout(dataset, vertExag, depthClip)
@@ -99,12 +102,14 @@ export default function OceanScene({ dataset, cameraRef }) {
       <directionalLight position={[80, 140, 60]} intensity={1.05} />
 
       <DioramaBlock dataset={dataset} meshRef={blockRef} />
+      <Isosurface dataset={dataset} />
 
       <PickMarker point={hover} color="#4fc3f7" pulse={false} />
       <PickMarker point={selected} color="#ffc46b" pulse />
 
       <DepthProbe dataset={dataset} />
-      <PointSelection dataset={dataset} blockRef={blockRef} />
+      <ObservationMarkers dataset={dataset} groupRef={floatsRef} />
+      <PointSelection dataset={dataset} blockRef={blockRef} floatsRef={floatsRef} />
 
       {/* Orbit-only: this is a bounded object you walk around, not a space you
           fly through. Free-fly lives on in FreeFlyCamera.jsx for the future

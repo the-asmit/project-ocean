@@ -14,7 +14,7 @@ export const useVisualizationState = create((set) => ({
   // an index from the old one would point at a different depth in the new one.
   setRegion: (region) =>
     set({ region, selected: null, hover: null, depthClip: 0, clipIndex: 0,
-         westIndex: 0 }),
+         westIndex: 0, selectedFloatId: null, isoStats: null }),
 
   // True while a tile is being fetched/derived. The previously loaded dataset
   // stays on screen underneath — a frozen block with no feedback is worse than
@@ -41,6 +41,17 @@ export const useVisualizationState = create((set) => ({
   // Shared because the expanded 3D view covers the right rail and has to mount
   // its own copy of the section controls; both need to know which is on screen.
   sceneExpanded: false,
+  // in-situ observations (mock source for now — see ObservationSource.js)
+  showArgo: true,
+  selectedFloatId: null,
+  // --- isosurface (marching cubes over the same volume) -----------------
+  // Off by default: it is a derived layer, and nothing about an existing
+  // view should change until the user asks for it. The value is set to the
+  // tile's own range on load — 20 deg C where the tile contains it (the D20
+  // thermocline proxy the spec names), else the middle of what it has.
+  showIso: false,
+  isoValue: 20,
+  isoStats: null,          // { triangles, vertices, ms, empty } from the mesher
   density: 0.022,           // Beer-Lambert extinction per world unit
   // The diorama needs real vertical presence (at 1x a 600 km x 3.5 km tile is a
   // pancake) without becoming a cube. 8x reads as a wide slab and still leaves
@@ -53,6 +64,13 @@ export const useVisualizationState = create((set) => ({
   setSliceExtended: (sliceExtended) => set({ sliceExtended }),
   setWestIndex: (westIndex) => set({ westIndex }),
   setSceneExpanded: (sceneExpanded) => set({ sceneExpanded }),
+  setShowArgo: (showArgo) => set({ showArgo }),
+  setShowIso: (showIso) => set({ showIso }),
+  setIsoValue: (isoValue) => set({ isoValue }),
+  setIsoStats: (isoStats) => set({ isoStats }),
+  // selecting a float clears the field pin: the profile panel shows one
+  // subject at a time, and two highlighted things would be ambiguous
+  setSelectedFloat: (selectedFloatId) => set({ selectedFloatId, selected: null }),
   setDensity: (density) => set({ density }),
   setVertExag: (vertExag) => set({ vertExag }),
   setShowDetail: (showDetail) => set({ showDetail }),
@@ -84,5 +102,5 @@ export const useVisualizationState = create((set) => ({
   probeIndex: 0,            // index into the real model levels
   setProbeIndex: (probeIndex) => set({ probeIndex }),
   setSelected: (selected, probeIndex = 0) => set({ selected, probeIndex }),
-  clearSelected: () => set({ selected: null, probeIndex: 0 }),
+  clearSelected: () => set({ selected: null, probeIndex: 0, selectedFloatId: null }),
 }))

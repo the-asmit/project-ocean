@@ -2,7 +2,9 @@ import { useEffect, useMemo } from 'react'
 import Panel from './Panel.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { sliceStops, clipYForIndex, stopAt, westStops } from '../scene/sliceStops.js'
+import { isoRange } from '../scene/isoRange.js'
 import { IconCheck } from './icons.jsx'
+import { rampColor } from '../charts/sampling.js'
 
 // The two slice controls and their companions, in ONE component.
 //
@@ -69,6 +71,22 @@ export default function SectionControls({ dataset, compact = false }) {
     s.setWestIndex(Math.round(Math.min(wStops.length, Math.max(0, i))))
   const westLabel = wStop ? `${wStop.lon.toFixed(2)}°E` : 'off'
 
+  // The isovalue range comes from THIS tile's own data, not the fixed 8-31
+  // colorbar clamp — offering a value the tile does not contain would give an
+  // empty surface with no explanation.
+  const iso = useMemo(() => isoRange(dataset), [dataset])
+  const isoSwatch = useMemo(() => rampColor(
+    (s.isoValue - dataset.meta.volume.valueMin)
+    / (dataset.meta.volume.valueMax - dataset.meta.volume.valueMin),
+  ), [dataset, s.isoValue])
+  const stats = s.isoStats
+
+  // A new tile has a different range; an isovalue carried over from the old
+  // one could sit outside it entirely.
+  useEffect(() => {
+    if (s.isoValue < iso.lo || s.isoValue > iso.hi) s.setIsoValue(iso.start)
+  }, [iso])
+
   const sliceLabel = !stop
     ? 'off'
     : stop.real
@@ -132,6 +150,40 @@ export default function SectionControls({ dataset, compact = false }) {
           <span className="badge">2 °C</span>
         </button>
       </div>
+
+      {/* The isosurface: real derived structure, not a stylized layer, so it
+          is badged DERIVED rather than STYLIZED or MOCK. */}
+      <div className="field">
+        <button
+          type="button"
+          className={`layer${s.showIso ? ' on' : ''}`}
+          aria-pressed={s.showIso}
+          onClick={() => s.setShowIso(!s.showIso)}
+          title="Marching cubes over the same volume the cut faces read — the 3D surface where the field equals one value"
+        >
+          <span className="tick"><IconCheck size={9} /></span>
+          <span className="swatch" style={{ background: isoSwatch }} />
+          <span className="name">Isosurface</span>
+          <span className="badge">DERIVED</span>
+        </button>
+      </div>
+      {s.showIso && (
+        <Slider
+          label="Isovalue" value={s.isoValue}
+          min={iso.lo} max={iso.hi} step={iso.step}
+          format={(v) => `${v.toFixed(2)} ${dataset.meta.volume.units}`}
+          onChange={s.setIsoValue}
+          hint={
+            stats && stats.empty
+              ? `No ${s.isoValue.toFixed(2)} ${dataset.meta.volume.units} surface in what is left of the block — the field never crosses that value here.`
+              : hint(
+                stats
+                  ? `${stats.triangles.toLocaleString()} triangles from the model's own ${dataset.meta.volume.levelsReal} levels, rebuilt in ${stats.ms.toFixed(0)} ms. Drag the top slice down past it to lift it into open air. Open edges are where the field meets land or its ${maxDataM.toFixed(0)} m extent.`
+                  : `This tile spans ${iso.lo.toFixed(1)}–${iso.hi.toFixed(1)} ${dataset.meta.volume.units}.`,
+              )
+          }
+        />
+      )}
     </Panel>
   )
 }

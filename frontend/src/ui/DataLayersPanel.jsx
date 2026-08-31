@@ -5,7 +5,6 @@ import { IconCheck } from './icons.jsx'
 // Observation networks INCOIS actually operates in this basin. None are wired
 // to a feed yet, so every row says so rather than rendering an empty layer.
 const OBSERVATIONS = [
-  { key: 'argo', label: 'Argo floats', color: '#5ad18c' },
   { key: 'glider', label: 'Gliders', color: '#a98cf0' },
   { key: 'ctd', label: 'CTD stations', color: '#ffc46b' },
   { key: 'drifter', label: 'Drifters', color: '#4fc3f7' },
@@ -36,6 +35,8 @@ function Layer({ on, disabled, children, onClick, swatch, badge, title }) {
 export default function DataLayersPanel({ dataset }) {
   const variable = useVisualizationState((s) => s.variable)
   const setVariable = useVisualizationState((s) => s.setVariable)
+  const showArgo = useVisualizationState((s) => s.showArgo)
+  const setShowArgo = useVisualizationState((s) => s.setShowArgo)
   const showDetail = useVisualizationState((s) => s.showDetail)
   const setShowDetail = useVisualizationState((s) => s.setShowDetail)
   const vars = dataset.meta.variables
@@ -81,6 +82,16 @@ export default function DataLayersPanel({ dataset }) {
         <div className="field">
           <span className="lbl">Observations</span>
           <div className="layers">
+            {/* Argo runs through the ObservationSource interface. The data
+                behind it is a mock, so it is badged MOCK, never SOON and never
+                unmarked — a fake profile beside a model curve has to say so. */}
+            <Layer
+              on={showArgo} swatch="#84a9c0" badge="MOCK"
+              onClick={() => setShowArgo(!showArgo)}
+              title="Synthetic Argo floats through the ObservationSource interface — click a float in the 3D view to compare it against the model"
+            >
+              Argo floats
+            </Layer>
             {OBSERVATIONS.map((o) => (
               <Layer key={o.key} disabled swatch={o.color} badge="SOON"
                 title={`${o.label} — no feed connected yet`}>

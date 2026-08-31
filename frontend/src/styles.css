@@ -368,6 +368,10 @@ kbd {
 .probe-read .why { font-size: 10.5px; color: var(--ink-3); font-style: italic; }
 .probe .hint { margin-top: 5px; }
 
+.cmp-foot .key { display: inline-flex; align-items: center; gap: 5px; }
+.cmp-foot .key i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+.cmp-foot .synth { color: var(--pin); }
+
 /* section controls, floated into the fullscreen 3D view ------------------ */
 .scene-controls {
   position: absolute; right: 10px; top: 108px; z-index: 7;

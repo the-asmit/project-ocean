@@ -153,6 +153,9 @@ export async function loadDataset({ region, date, variable }) {
   return {
     meta,
     field,
+    // the raw volume bytes, so the CPU sampler and the isosurface mesher read
+    // the same buffer the 3D texture was built from
+    rg8,
     height,
     bathy: new Float32Array(bathyBuf),   // (lat, lon) world-Y, NaN = land
     lut: Float32Array.from(meta.volume.depthLUT),

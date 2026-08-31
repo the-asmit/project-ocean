@@ -18,10 +18,11 @@ import { nearestLevel } from './useProbe.js'
 //
 // Either way the value shown is sampled from the same RG8 volume the block
 // shader renders, via dataset.sampler — one number, one source.
-export default function PointSelection({ dataset, blockRef, enabled = true }) {
+export default function PointSelection({ dataset, blockRef, floatsRef, enabled = true }) {
   const { camera, gl } = useThree()
   const setHover = useVisualizationState((s) => s.setHover)
   const setSelected = useVisualizationState((s) => s.setSelected)
+  const setSelectedFloat = useVisualizationState((s) => s.setSelectedFloat)
   const depthClip = useVisualizationState((s) => s.depthClip)
   const vertExag = useVisualizationState((s) => s.vertExag)
 
@@ -133,6 +134,17 @@ export default function PointSelection({ dataset, blockRef, enabled = true }) {
       const moved = Math.hypot(e.clientX - downAt.current.x, e.clientY - downAt.current.y)
       downAt.current = null
       if (moved > 4) return          // that was an orbit drag, not a click
+      // An observation marker wins over the block behind it: it is drawn as an
+      // overlay, so it must read as one too. Selecting a float is its own
+      // action — it must not also drop a field pin underneath.
+      const floats = floatsRef?.current
+      if (floats) {
+        raycaster.setFromCamera(ndc.current, camera)
+        const fh = raycaster.intersectObject(floats, true)
+        const id = fh.find((x) => x.object.userData.floatId)?.object.userData.floatId
+        if (id) { setSelectedFloat(id); return }
+      }
+
       const hit = pickRef.current()
       if (!hit) return
       const r = readoutRef.current(hit.p, hit.kind)
@@ -146,7 +158,7 @@ export default function PointSelection({ dataset, blockRef, enabled = true }) {
       el.removeEventListener('pointerdown', down)
       el.removeEventListener('pointerup', up)
     }
-  }, [gl, setSelected, dataset])
+  }, [gl, setSelected, setSelectedFloat, dataset, camera, raycaster, floatsRef])
 
   return null
 }

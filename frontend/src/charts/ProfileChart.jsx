@@ -3,7 +3,9 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
   ResponsiveContainer,
 } from 'recharts'
-import Panel from '../ui/Panel.jsx'
+import Panel, { IconButton } from '../ui/Panel.jsx'
+import { IconCollapse } from '../ui/icons.jsx'
+import { useComparison } from '../observations/useObservations.js'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { sampleProfile, makeSeafloorAt, rampColor } from './sampling.js'
 import { useProbe } from '../interaction/useProbe.js'
@@ -18,6 +20,96 @@ const TICK = { fill: '#77879e', fontSize: 9.5, fontFamily: 'IBM Plex Mono, monos
 function Knot({ cx, cy, payload, lo, hi }) {
   if (cx == null || cy == null) return null
   return <circle cx={cx} cy={cy} r={2} fill={rampColor((payload.value - lo) / (hi - lo))} stroke="#0e131b" strokeWidth={0.6} />
+}
+
+// Float curve is ink white, matching the selected marker in the 3D scene.
+// Green sat outside the console palette and clashed with the cyan model curve.
+const OBS = '#e4ecf7'
+
+function CmpTip({ active, payload, units }) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  return (
+    <div className="rc-tip">
+      <div><span className="k">depth </span>{p.depth.toFixed(0)} m</div>
+      <div style={{ color: OBS }}>float {p.obs?.toFixed(2)} {units}</div>
+      <div style={{ color: '#4fc3f7' }}>model {p.model?.toFixed(2) ?? '—'} {units}</div>
+      {p.diff != null && (
+        <div><span className="k">Δ </span>{p.diff > 0 ? '+' : ''}{p.diff.toFixed(2)} {units}</div>
+      )}
+    </div>
+  )
+}
+
+// Observation against model at the same position and day. Two curves, one axis.
+function ComparisonChart({ dataset, cmp }) {
+  const clearSelected = useVisualizationState((s) => s.clearSelected)
+  const v = dataset.meta.volume
+  const { float, rows, meanAbsDiff, worst } = cmp
+
+  const deepest = rows.length ? rows[rows.length - 1].depth : 0
+  const axisMax = Math.max(60, Math.ceil((deepest * 1.06) / 25) * 25)
+  const vals = rows.flatMap((r) => [r.obs, r.model]).filter((x) => x != null)
+  const lo = Math.floor(Math.min(...vals) - 1)
+  const hi = Math.ceil(Math.max(...vals) + 1)
+
+  return (
+    <Panel
+      className="chart-profile"
+      title="Model vs float"
+      sub={`${float.label} · ${float.lat.toFixed(2)}°N ${float.lon.toFixed(2)}°E · ${float.date}`}
+      tools={
+        <IconButton label="Back to profile (Esc)" onClick={clearSelected}>
+          <IconCollapse size={13} />
+        </IconButton>
+      }
+      bodyClass="chart-body"
+      footer={
+        <div className="chart-opts cmp-foot">
+          <span className="key"><i style={{ background: OBS }} />float</span>
+          <span className="key"><i style={{ background: '#4fc3f7' }} />model</span>
+          <span className="spacer" />
+          {meanAbsDiff != null && (
+            <span>mean |Δ| {meanAbsDiff.toFixed(2)} {v.units}</span>
+          )}
+          {worst && (
+            <span>max {worst.diff > 0 ? '+' : ''}{worst.diff.toFixed(2)} at {worst.depthM.toFixed(0)} m</span>
+          )}
+          {/* P3: a fabricated profile drawn beside a model curve is the most
+              misleading thing this app can render, so it says so, here, always */}
+          {cmp.synthetic && <span className="synth">SYNTHETIC float — not a measurement</span>}
+        </div>
+      }
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart layout="vertical" data={rows} margin={{ top: 6, right: 16, bottom: 4, left: 0 }}>
+          <CartesianGrid stroke={GRID} strokeDasharray="2 3" />
+          <XAxis
+            type="number" domain={[lo, hi]}
+            tick={TICK} tickLine={{ stroke: AXIS }} axisLine={{ stroke: AXIS }}
+            tickFormatter={(t) => t.toFixed(0)} height={22}
+            label={{ value: `${v.variableLabel.toLowerCase()} (${v.units})`, position: 'insideBottom', offset: -2, fill: '#5a6a80', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
+          />
+          <YAxis
+            dataKey="depth" type="number" domain={[0, axisMax]} width={42} allowDataOverflow
+            tick={TICK} tickLine={{ stroke: AXIS }} axisLine={{ stroke: AXIS }}
+            tickFormatter={(t) => t.toFixed(0)}
+            label={{ value: 'depth (m)', angle: -90, position: 'insideLeft', offset: 14, fill: '#5a6a80', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
+          />
+          <Tooltip content={<CmpTip units={v.units} />} cursor={{ stroke: '#4fc3f7', strokeWidth: 1, strokeDasharray: '3 3' }} />
+          <Line
+            type="monotone" dataKey="model" stroke="#4fc3f7" strokeWidth={1.6}
+            dot={false} isAnimationActive={false} connectNulls={false}
+          />
+          <Line
+            type="monotone" dataKey="obs" stroke={OBS} strokeWidth={1.6}
+            strokeDasharray="4 2" dot={{ r: 1.5, fill: OBS, strokeWidth: 0 }}
+            isAnimationActive={false} connectNulls={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </Panel>
+  )
 }
 
 function ProfileTip({ active, payload, units }) {
@@ -35,6 +127,9 @@ export default function ProfileChart({ dataset }) {
   const selected = useVisualizationState((s) => s.selected)
   const hover = useVisualizationState((s) => s.hover)
   const probe = useProbe(dataset)
+  // When a float is selected the panel becomes the model-vs-observation
+  // comparison — the PS's headline gap. Same chart, two curves.
+  const cmp = useComparison(dataset)
 
   const v = dataset.meta.volume
   const b = dataset.meta.bathymetry
@@ -55,6 +150,10 @@ export default function ProfileChart({ dataset }) {
 
   const deepest = data.length ? data[data.length - 1].depth : 0
   const axisMax = Math.max(60, Math.ceil((deepest * 1.06) / 25) * 25)
+
+  // After every hook: a conditional return above them would change the hook
+  // count between renders.
+  if (cmp) return <ComparisonChart dataset={dataset} cmp={cmp} />
 
   const lo = Math.floor(Math.min(...data.map((d) => d.value), Infinity) - 1)
   const hi = Math.ceil(Math.max(...data.map((d) => d.value), -Infinity) + 1)

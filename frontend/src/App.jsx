@@ -18,6 +18,9 @@ function SourceNote({ dataset }) {
   const showDetail = useVisualizationState((s) => s.showDetail)
   const clipIndex = useVisualizationState((s) => s.clipIndex)
   const westIndex = useVisualizationState((s) => s.westIndex)
+  const showArgo = useVisualizationState((s) => s.showArgo)
+  const showIso = useVisualizationState((s) => s.showIso)
+  const isoValue = useVisualizationState((s) => s.isoValue)
   const v = dataset.meta.volume
   const curve = dataset.meta.bathymetry.depthCurve
   // Slicing replaces the stylized top face with a real horizontal section, so
@@ -46,6 +49,18 @@ function SourceNote({ dataset }) {
       </span>
       <span className="dot">·</span>
       <span>1/12° ≈ 9 km grid</span>
+      {showArgo && <span className="dot">·</span>}
+      {showArgo && <span className="synth">Argo floats are SYNTHETIC (mock source)</span>}
+      {/* The isosurface is DERIVED, not synthetic and not stylized: marching
+          cubes over the same bytes the cut faces sample. It says which, so it
+          is never lumped in with the two disclosures either side of it. */}
+      {showIso && <span className="dot">·</span>}
+      {showIso && (
+        <span>
+          Isosurface — {isoValue.toFixed(2)} {v.units} surface, REAL structure
+          derived from the same {v.source} {v.variable} volume
+        </span>
+      )}
       <span className="dot opt">·</span>
       <span className="opt">Depth axis non-linearly exaggerated (curve {curve})</span>
     </>
