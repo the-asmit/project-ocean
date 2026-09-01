@@ -9,13 +9,10 @@ import { contourName, fmtStep } from './variableTerms.js'
 
 // The two slice controls and their companions, in ONE component.
 //
-// It renders in two places — the right rail, and the fullscreen 3D view, which
-// covers that rail — so the slice logic has exactly one definition and the two
-// mounts read the same store. The fullscreen view must not be less capable than
-// the docked one.
-//
-// Only ONE mount exists at a time — the rail unmounts its copy while the view
-// is expanded — so ids stay unique and the arrow-key handler is never doubled.
+// ONE mount, in the SECTION panel of the in-canvas rail. It used to render in
+// two places — the right rail and the fullscreen view that covered it — which
+// meant guarding against duplicate element ids and a doubled arrow-key handler.
+// Fullscreen is gone, so that is one mount and one handler by construction.
 
 export function Slider({ label, value, min, max, step, format, onChange, hint }) {
   const id = `sl-${label.replace(/\s+/g, '-').toLowerCase()}`

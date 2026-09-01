@@ -73,9 +73,6 @@ export const useVisualizationState = create((set) => ({
   // The west-east cut, independent of the depth cut: each removes its own part
   // of whatever geometry the other has left.
   westIndex: 0,             // 0 = no cut, else 1-based index into westStops
-  // Shared because the expanded 3D view covers the right rail and has to mount
-  // its own copy of the section controls; both need to know which is on screen.
-  sceneExpanded: false,
 
   // --- the in-canvas control rail ---------------------------------------
   // ONE open-panel mechanism for the whole app. Every control that used to live
@@ -135,7 +132,6 @@ export const useVisualizationState = create((set) => ({
   setSlice: (clipIndex, depthClip) => set({ clipIndex, depthClip }),
   setSliceExtended: (sliceExtended) => set({ sliceExtended }),
   setWestIndex: (westIndex) => set({ westIndex }),
-  setSceneExpanded: (sceneExpanded) => set({ sceneExpanded }),
   setShowArgo: (showArgo) => set({ showArgo }),
   setShowIso: (showIso) => set({ showIso }),
   setIsoValue: (isoValue) => set({ isoValue }),

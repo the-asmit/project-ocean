@@ -436,14 +436,6 @@ kbd {
 .cmp-foot .key i { width: 7px; height: 7px; border-radius: 50%; display: block; }
 .cmp-foot .synth { color: var(--pin); }
 
-/* section controls, floated into the fullscreen 3D view ------------------ */
-.scene-controls {
-  position: absolute; right: 10px; top: 108px; z-index: 7;
-  width: 268px; max-height: calc(100% - 168px); overflow: auto;
-  background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r);
-  box-shadow: var(--shadow);
-}
-.scene-controls .panel { background: transparent; }
 
 /* what the cut top face is, stated on the canvas ------------------------- */
 .section-badge {
@@ -463,11 +455,6 @@ kbd {
 .section-badge.void { border-color: var(--line-2); }
 .section-badge.void .d { color: var(--ink-2); }
 
-/* fullscreen deep-dive */
-.scene-panel.expanded {
-  position: fixed; inset: 0; z-index: 60; grid-column: auto; grid-row: auto;
-  border: none; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .5);
-}
 
 /* busy / error veil over the 3D panel ------------------------------------ */
 .scene-busy {

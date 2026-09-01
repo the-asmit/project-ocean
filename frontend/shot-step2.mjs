@@ -29,7 +29,7 @@ console.log('   outside canvas:', (await p.$$eval('.center > * , .charts > *', (
 await p.screenshot({ path: 'screenshots/step2-collapsed.png' })
 
 console.log('\n2. EACH GROUP OPENS, ONE AT A TIME')
-const groups = ['Field', 'Section', 'Operational', 'Scale', 'Region', 'Tools']
+const groups = ['Field', 'Section', 'Operational', 'Scale', 'Tools']
 for (const g of groups) {
   await p.click(`.rail-btn[aria-label="${g}"]`)
   await p.waitForTimeout(500)
@@ -102,14 +102,14 @@ console.log('   segs           :', JSON.stringify(await p.$$eval('.rail-panel .s
   (n) => n.map((x) => `${x.textContent.trim()}${x.disabled ? '(disabled)' : ''}${x.classList.contains('on') ? '*' : ''}`))))
 await p.screenshot({ path: 'screenshots/step2-scale.png' })
 
-console.log('\n7. REGION — the map, drag-select intact')
-await p.click('.rail-btn[aria-label="Region"]'); await p.waitForTimeout(900)
-console.log('   map canvas     :', JSON.stringify(await box('.rail-panel .mm-canvas')))
-console.log('   pick hint      :', await p.$eval('.rail-panel .mm-pick', (n) => n.textContent.trim()))
+console.log('\n7. MAP IS A SIBLING PANEL, NOT A RAIL GROUP')
+console.log('   map panel      :', JSON.stringify(await box('.map-panel')))
+console.log('   left of scene  :', (await box('.map-panel')).x < (await box('.scene-panel')).x)
+console.log('   map canvas     :', JSON.stringify(await box('.mm-canvas')))
+console.log('   pick hint      :', await p.$eval('.mm-pick', (n) => n.textContent.trim()))
 await p.screenshot({ path: 'screenshots/step2-region.png' })
 
 console.log('\n8. PIN — depth cursor lives in the canvas')
-await p.click('.rail-btn[aria-label="Region"]'); await p.waitForTimeout(300)
 const c = await box('.scene-host canvas')
 await p.mouse.click(c.x + c.w * 0.55, c.y + c.h * 0.5)
 await p.waitForTimeout(900)

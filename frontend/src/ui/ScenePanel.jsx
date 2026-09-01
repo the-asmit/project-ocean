@@ -1,65 +1,48 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import Panel, { IconButton } from './Panel.jsx'
 import OceanScene from '../scene/OceanScene.jsx'
 import HUDLabel from '../interaction/HUDLabel.jsx'
 import DepthRuler from './DepthRuler.jsx'
-import SectionControls from './SectionControls.jsx'
 import SectionBadge from './SectionBadge.jsx'
 import SceneRail from './rail/SceneRail.jsx'
 import PinnedControls from '../interaction/PinnedControls.jsx'
 import TimelineControls from './TimelineControls.jsx'
 import { useCurrentsState, useCurrentsData } from '../currents/useCurrentsState.js'
-import { IconCheck } from './icons.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
-import { IconExpand, IconCollapse, IconHome } from './icons.jsx'
+import { IconHome } from './icons.jsx'
 
-// The 3D view, bounded. Nothing inside OceanScene changed — it just sizes to a
-// panel instead of the window now, and R3F picks up the resize itself.
+// The 3D view, and everything drawn over it.
+//
+// There is no fullscreen mode any more. It existed so the deep-dive could reach
+// controls the right rail was hiding, and it did that by mounting a SECOND copy
+// of the section controls — the last duplicate control path in the app. With
+// every control now inside the canvas and the canvas full-width, it had nothing
+// left to do, and removing it also disposes of the bug where the Scale panel
+// was unreachable while expanded.
 export default function ScenePanel({ dataset, cameraRef }) {
   const hostRef = useRef()
-  const expanded = useVisualizationState((s) => s.sceneExpanded)
-  const setExpanded = useVisualizationState((s) => s.setSceneExpanded)
   const goHome = useVisualizationState((s) => s.goHome)
   const loading = useVisualizationState((s) => s.loading)
   const loadError = useVisualizationState((s) => s.loadError)
+  // still needed by the on-canvas REAL CURRENTS chip; only the fullscreen
+  // duplicate's setters went with it
   const showCurrents = useCurrentsState((s) => s.showCurrents)
-  const setShowCurrents = useCurrentsState((s) => s.setShowCurrents)
-  const setPanelLayer = useVisualizationState((s) => s.setPanelLayer)
   const levelIndex = useCurrentsState((s) => s.levelIndex)
   const railPanel = useVisualizationState((s) => s.railPanel)
   const currents = useCurrentsData(dataset)
   const m = dataset.meta
   const isBox = String(m.region).startsWith('bbox:')
 
-  // Esc leaves the deep-dive before it reaches the clear-pin handler.
-  useEffect(() => {
-    if (!expanded) return
-    const onKey = (e) => {
-      if (e.code === 'Escape') { e.stopPropagation(); setExpanded(false) }
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [expanded, setExpanded])
-
   return (
     <Panel
-      className={`scene-panel${expanded ? ' expanded' : ''}`}
+      className="scene-panel"
       title="3D volume"
       sub={isBox
         ? `${m.regionLabel} · custom selection`
         : `${m.regionLabel} · ${m.bbox.lat_min}–${m.bbox.lat_max}°N ${m.bbox.lon_min}–${m.bbox.lon_max}°E`}
       bodyClass="flush"
       tools={
-        <>
-          <IconButton label="Home view (H)" onClick={goHome}><IconHome size={13} /></IconButton>
-          <IconButton
-            label={expanded ? 'Exit full view (Esc)' : 'Full view'}
-            active={expanded}
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? <IconCollapse size={13} /> : <IconExpand size={13} />}
-          </IconButton>
-        </>
+        <IconButton label="Home view (H)" onClick={goHome}><IconHome size={13} /></IconButton>
       }
     >
       {/* The rail's open panel is an overlay, so the canvas legends and hints
@@ -73,31 +56,6 @@ export default function ScenePanel({ dataset, cameraRef }) {
         {/* Every interactive control lives in here now. */}
         <SceneRail dataset={dataset} cameraRef={cameraRef} />
         <PinnedControls dataset={dataset} />
-
-        {/* Expanded covers the right rail, so the section controls come with
-            it. Same component the rail renders — one definition of the slice
-            logic, one store. The rail unmounts its copy while this is up. */}
-        {expanded && (
-          <div className="scene-controls">
-            <SectionControls dataset={dataset} compact />
-            {/* The currents toggle otherwise lives only in the left rail, which
-                this view covers — so the deep-dive could show the flow lines
-                but never turn them on. Same store, so the two stay in step. */}
-            <Panel title="Circulation" sub="GLORYS12V1 uo/vo">
-              <button
-                type="button"
-                className={`layer${showCurrents ? ' on' : ''}`}
-                aria-pressed={showCurrents}
-                onClick={() => { const n = !showCurrents; setShowCurrents(n); setPanelLayer(n ? 'currents' : 'field') }}
-              >
-                <span className="tick"><IconCheck size={9} /></span>
-                <span className="swatch" style={{ background: '#a98cf0' }} />
-                <span className="name">Current flow lines</span>
-                <span className="badge">REAL</span>
-              </button>
-            </Panel>
-          </div>
-        )}
 
         {loading && (
           <div className="scene-busy">
