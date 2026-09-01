@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { useHeatPotential } from '../state/useHeatPotential.js'
@@ -50,6 +51,54 @@ import { THRESHOLD, TCHP_MAX } from './heatPotential.js'
 const BUILD_EXAG = 8
 
 const CONTOUR = new THREE.Color('#eaf1ff')
+
+// ---------------------------------------------------------------------------
+// MOUNT-IN. 600 ms, cubic ease-out.
+//
+// THIS MOVES A DRAWING, NOT A DATUM. Both grids are computed in full before the
+// first animated frame — the useMemo above has already run. What eases is the
+// group's Y SCALE, from 0 (the sheet flat at the sea surface) to 1 (every vertex
+// at the depth it was built with), and the contour's drawRange, which reveals
+// segments that already exist in the buffer. No value is interpolated, nothing
+// is faded in from a placeholder, and there is no intermediate state in which
+// the sheet is at a depth the data does not support. Freeze it at any t and
+// every point on screen is the true D26 scaled by t — which is exactly what the
+// vertical-exaggeration control already does, and is disclosed in the footer.
+//
+// The scale trick is only available because depth 0 is world y = 0: scaling Y
+// about the origin maps every depth to t x depth, so "flat at the surface" is
+// literally t = 0. Nothing has to be re-meshed per frame.
+//
+// The surface and the field animate INDEPENDENTLY, because their triggers are
+// different: un-slicing brings the TCHP lid back and it should fade in, but the
+// D26 sheet never left and must not drop through the block again.
+const MOUNT_MS = 600
+const easeOut = (x) => 1 - Math.pow(1 - x, 3)
+
+function newAnim(reduced) {
+  return reduced
+    ? { start: 0, raw: 1, t: 1, running: false }
+    : { start: performance.now(), raw: 0, t: 0, running: true }
+}
+// WALL CLOCK, NOT ACCUMULATED DELTAS. Summing per-frame dt makes the duration a
+// function of the frame rate: the frame that commits the toggle carries React's
+// own work in its delta (~200 ms measured headless, a third of the whole
+// mount-in), so the sheet jumps a third of the way before it is drawn once.
+// Capping the step fixes the jump and introduces the opposite fault — a slow
+// renderer stretches 600 ms into two seconds. Reading the clock does neither: the
+// mount-in always takes 600 ms, and a slow renderer simply shows fewer steps of
+// it, which is what it should show.
+function stepAnim(a) {
+  if (!a.running) return
+  a.raw = Math.min(1, (performance.now() - a.start) / MOUNT_MS)
+  a.t = easeOut(a.raw)
+  if (a.raw >= 1) a.running = false
+}
+// Honoured at the moment the layer appears rather than read once at module load,
+// so a viewer who turns the preference on mid-session gets it immediately.
+const prefersReduced = () =>
+  typeof window !== 'undefined'
+  && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 // ---------------------------------------------------------------------------
 
@@ -220,14 +269,60 @@ export default function HeatPotential({ dataset }) {
     if (import.meta.env.DEV) window.__oceanHeatMesh = { built, heat, show }
   })
 
-  if (!show || !built) return null
+  // --- mount-in ----------------------------------------------------------
+  const surfGroup = useRef()
+  const fieldMat = useRef()
+  const drapedLine = useRef()
+  const flatLine = useRef()
+  const animSurf = useRef({ start: 0, raw: 1, t: 1, running: false })
+  const animField = useRef({ start: 0, raw: 1, t: 1, running: false })
+  const was = useRef({ surf: false, field: false })
+
+  const surfLive = show && !!heat && wantSurface
+  const fieldLive = show && !!heat && wantField
+  useEffect(() => {
+    const reduced = prefersReduced()
+    if (surfLive && !was.current.surf) animSurf.current = newAnim(reduced)
+    if (fieldLive && !was.current.field) animField.current = newAnim(reduced)
+    was.current = { surf: surfLive, field: fieldLive }
+  }, [surfLive, fieldLive])
+
   const s = vertExag / BUILD_EXAG
+
+  // Applied every frame rather than through JSX props, so React re-rendering
+  // mid-animation (a palette change, a slice) cannot stamp the final value back
+  // over the eased one. Two assignments and two drawRange calls; nothing here
+  // touches geometry.
+  useFrame(() => {
+    const a = animSurf.current
+    const f = animField.current
+    stepAnim(a)
+    stepAnim(f)
+    if (surfGroup.current) surfGroup.current.scale.set(1, s * a.t, 1)
+    if (fieldMat.current) fieldMat.current.opacity = 0.9 * f.t
+    // even counts only: a line segment is two vertices and half of one is a ray
+    const walk = (ref, t) => {
+      if (!ref.current) return
+      const n = ref.current.geometry.attributes.position.count
+      ref.current.geometry.setDrawRange(0, Math.floor((n * t) / 2) * 2)
+    }
+    walk(drapedLine, a.t)
+    walk(flatLine, f.t)
+    if (import.meta.env.DEV) {
+      window.__oceanHeatAnim = {
+        surf: a.t, surfRaw: a.raw, field: f.t, fieldRaw: f.raw,
+        running: a.running || f.running,
+      }
+    }
+  })
+
+  if (!show || !built) return null
 
   return (
     <>
       {/* D26 — inside the block, so it needs both passes */}
       {wantSurface && built.surface && (
-        <group scale={[1, s, 1]}>
+        <group ref={surfGroup} scale={[1, s, 1]}>
           <mesh geometry={built.surface} raycast={() => null}>
             <meshStandardMaterial
               vertexColors transparent opacity={0.42} side={THREE.DoubleSide}
@@ -249,7 +344,9 @@ export default function HeatPotential({ dataset }) {
                   depthFunc={THREE.GreaterDepth} depthWrite={false}
                 />
               </lineSegments>
-              <lineSegments geometry={built.surfaceLine} renderOrder={3}>
+              {/* Both passes share ONE geometry, so one drawRange walk reveals
+                  the buried half and the exposed half together. */}
+              <lineSegments ref={drapedLine} geometry={built.surfaceLine} renderOrder={3}>
                 <lineBasicMaterial color={CONTOUR} depthWrite={false} />
               </lineSegments>
             </>
@@ -265,13 +362,14 @@ export default function HeatPotential({ dataset }) {
         <group>
           <mesh geometry={built.field} raycast={() => null} renderOrder={1}>
             <meshStandardMaterial
+              ref={fieldMat}
               vertexColors transparent opacity={0.9} side={THREE.DoubleSide}
               roughness={0.72} metalness={0.02}
               polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2}
             />
           </mesh>
           {built.fieldLine && (
-            <lineSegments geometry={built.fieldLine} renderOrder={2}>
+            <lineSegments ref={flatLine} geometry={built.fieldLine} renderOrder={2}>
               <lineBasicMaterial color={CONTOUR} depthWrite={false} depthTest={false} />
             </lineSegments>
           )}
