@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useVisualizationState } from '../state/useVisualizationState.js'
 import { useProbe } from '../interaction/useProbe.js'
+import { useHeatPotential } from '../state/useHeatPotential.js'
+import { sampleHeat, THRESHOLD } from '../scene/heatPotential.js'
 
 // The read-only half of the pinned point, outside the canvas.
 //
@@ -8,11 +10,16 @@ import { useProbe } from '../interaction/useProbe.js'
 // marker it drives. What is left is numbers you read rather than controls you
 // touch, which is what belongs out here.
 //
-// FOUR OF THESE EIGHT ARE NOT COMPUTED YET. The operational quantities (TCHP,
-// D26, thermocline, anomaly) show an em dash and a SOON badge rather than a
-// zero or a plausible-looking placeholder, for the same reason an empty Argo
-// layer says it is empty: a number you cannot distinguish from a real one is
-// worse than no number.
+// TCHP and D26 ARE LIVE — computed from the loaded temperature volume, from the
+// same one-per-tile pass the 3-D sheets read, so a card and a sheet can never
+// disagree. They read even when the layer is switched off: the quantity is a
+// property of the water at the pin, not of whether it is currently drawn.
+//
+// THERMOCLINE AND ANOMALY ARE NOT COMPUTED YET. They show an em dash and a SOON
+// badge rather than a zero or a plausible-looking placeholder, for the same
+// reason an empty Argo layer says it is empty: a number you cannot distinguish
+// from a real one is worse than no number. A censored D26 obeys the same rule
+// in miniature — it is printed as a bound, never as a bare depth.
 
 function Stat({ label, value, unit, sub, soon, warn }) {
   return (
@@ -36,6 +43,7 @@ export default function PinnedStats({ dataset }) {
   const selected = useVisualizationState((s) => s.selected)
   const variable = useVisualizationState((s) => s.variable)
   const probe = useProbe(dataset)
+  const heat = useHeatPotential(dataset)
   const [server, setServer] = useState(null)
   const v = dataset.meta.volume
 
@@ -61,6 +69,13 @@ export default function PinnedStats({ dataset }) {
   }, [selected, dataset, variable])
 
   const pinned = !!selected && !!probe
+  // Reads off the same grids the sheets are built from, bilinear, and null on
+  // any land corner — a heat content averaged over land is not a smaller heat
+  // content, it is a wrong one.
+  const hp = pinned ? sampleHeat(heat, dataset.map, selected.lon, selected.lat) : null
+  const heatSub = !heat
+    ? 'needs the temperature volume'
+    : (pinned ? 'no reading — land in the cell' : 'heat above 26 °C')
   const serverText = !server ? DASH
     : server.loading ? '…'
       : server.error ? 'error'
@@ -113,9 +128,31 @@ export default function PinnedStats({ dataset }) {
           warn={!!server?.error}
         />
 
-        {/* Seated, not computed — see OPERATIONAL_LAYER_SPEC.md §3–§4. */}
-        <Stat label="TCHP" value={DASH} sub="heat above 26 °C" soon />
-        <Stat label="D26" value={DASH} sub="depth of the 26 °C isotherm" soon />
+        {/* Live — OPERATIONAL_LAYER_SPEC.md §3. */}
+        <Stat
+          label="TCHP"
+          value={hp ? hp.tchp.toFixed(0) : DASH}
+          unit={hp ? 'kJ/cm²' : ''}
+          sub={hp
+            ? (hp.over
+              ? `above the ${THRESHOLD} kJ/cm² threshold`
+              : `below the ${THRESHOLD} kJ/cm² threshold`)
+            : heatSub}
+        />
+        <Stat
+          label="D26"
+          value={hp && hp.d26 != null ? `${hp.censored ? '≥' : ''}${hp.d26.toFixed(0)}` : DASH}
+          unit={hp && hp.d26 != null ? 'm' : ''}
+          sub={hp
+            ? (hp.d26 == null
+              ? 'no water warmer than 26 °C here'
+              : (hp.censored
+                ? 'warm to the seafloor — a lower bound'
+                : 'depth of the 26 °C isotherm'))
+            : heatSub}
+        />
+
+        {/* Seated, not computed — see OPERATIONAL_LAYER_SPEC.md §4. */}
         <Stat label="Thermocline" value={DASH} sub="max |dT/dz|" soon />
         <Stat label="Anomaly" value={DASH} sub="vs the tile mean" soon />
       </div>

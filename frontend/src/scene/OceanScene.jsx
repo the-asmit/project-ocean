@@ -7,6 +7,7 @@ import PointSelection from '../interaction/PointSelection.jsx'
 import DepthProbe from '../interaction/DepthProbe.jsx'
 import ObservationMarkers from './ObservationMarkers.jsx'
 import Isosurface from './Isosurface.jsx'
+import HeatPotential from './HeatPotential.jsx'
 import CurrentStreamlines from '../currents/CurrentStreamlines.jsx'
 import GliderRibbon from './GliderRibbon.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
@@ -104,6 +105,7 @@ export default function OceanScene({ dataset, cameraRef }) {
 
       <DioramaBlock dataset={dataset} meshRef={blockRef} />
       <Isosurface dataset={dataset} />
+      <HeatPotential dataset={dataset} />
       <CurrentStreamlines dataset={dataset} />
       <GliderRibbon dataset={dataset} />
 

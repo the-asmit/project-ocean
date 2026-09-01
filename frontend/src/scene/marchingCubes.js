@@ -54,7 +54,7 @@ const PAIR = { 3: [0, 1], 5: [0, 2], 6: [1, 2], 9: [0, 3], 10: [1, 3], 12: [2, 3
 // publishes are the shell's true silhouette, so the surface is clipped to
 // them — read-only, nothing about the shell changes. Top and bottom rings are
 // lerped by the vertex's own height, because the tear narrows with depth.
-function makeInsideShell(rings, topY, botY) {
+export function makeInsideShell(rings, topY, botY) {
   if (!rings) return null
   const { top, bot } = rings
   const n = Math.min(top.length, bot.length)

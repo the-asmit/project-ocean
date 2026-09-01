@@ -803,8 +803,15 @@ kbd {
 }
 
 /* provenance on the canvas, not only in a panel */
-.flow-chip {
+/* Canvas chip stack. Both layers want a legend in the same corner, so they
+   share one column anchored to its bottom edge and grow upward — otherwise the
+   second one to appear lands on top of the first. */
+.scene-chips {
   position: absolute; left: 10px; bottom: 66px; z-index: 6; pointer-events: none;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+}
+
+.flow-chip {
   display: flex; align-items: center; gap: 6px;
   background: rgba(8, 11, 16, .8);
   border: 1px solid var(--flow-line);
@@ -1142,12 +1149,14 @@ kbd {
 .scene-host { --rail-w: 58px; }
 .scene-host.rail-open { --rail-w: 360px; }
 .scene-host .section-badge,
+.scene-host .scene-chips,
 .scene-host .scene-foot {
   left: calc(var(--rail-w) + 10px);
   transition: left .16s var(--ease);
 }
 @media (prefers-reduced-motion: reduce) {
-  .scene-host .section-badge, .scene-host .scene-foot { transition: none; }
+  .scene-host .section-badge, .scene-host .scene-chips,
+  .scene-host .scene-foot { transition: none; }
 }
 
 @media (max-width: 1180px) {
@@ -1234,3 +1243,64 @@ kbd {
   .charts { grid-template-columns: 216px minmax(0, 1fr) minmax(0, 1.12fr) minmax(0, 1fr); }
   .stat-value { font-size: 13.5px; }
 }
+
+
+/* cyclone heat potential ------------------------------------------------- */
+/* Same chip idiom as REAL CURRENTS: a fixed ramp, the threshold marked on it,
+   and the provenance said out loud. No per-tile numbers, because the ramp is
+   fixed at 0-200 kJ/cm2 so two tiles can be compared by colour. */
+.heat-chip {
+  background: rgba(8, 11, 16, .82);
+  border: 1px solid var(--line-2);
+  border-radius: 4px; padding: 6px 9px 7px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .1em;
+  color: var(--ink-2); min-width: 186px;
+}
+.heat-chip .hc-head { display: flex; align-items: baseline; gap: 6px; color: var(--ink); }
+.heat-chip .hc-head em {
+  color: var(--ink-3); font-style: normal; letter-spacing: .04em; font-size: 8.5px;
+}
+.heat-chip .hc-bar {
+  position: relative; height: 7px; margin: 6px 0 3px; border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
+}
+.heat-chip .hc-tick {
+  position: absolute; top: -2px; bottom: -2px; width: 1px;
+  background: #eaf1ff; box-shadow: 0 0 0 1px rgba(0,0,0,.55);
+}
+.heat-chip .hc-scale {
+  position: relative; display: flex; justify-content: space-between;
+  color: var(--ink-3); font-size: 8.5px; letter-spacing: .04em;
+}
+.heat-chip .hc-thresh {
+  position: absolute; transform: translateX(-50%); color: #eaf1ff;
+}
+.heat-chip .hc-key {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--line);
+  color: var(--ink-3); letter-spacing: .04em; font-size: 8.5px;
+}
+.heat-chip .hc-line {
+  width: 14px; height: 0; border-top: 1px solid #eaf1ff; display: block; flex: none;
+}
+
+/* the operational number on the hover/pin card */
+.hud-card .tchp {
+  margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--line);
+  color: var(--ink-2);
+}
+.hud-card .tchp.over { color: #ffd08a; }
+
+/* sub-layers of a live layer: indented under the row that owns them */
+.layers.sub {
+  display: flex; flex-direction: column; gap: 1px;
+  margin: 4px 0 0 12px; padding-left: 8px; border-left: 1px solid var(--line);
+}
+
+/* an inline action inside a hint paragraph */
+.linkish {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--accent, #58d4ff); font: inherit; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linkish:hover { color: var(--ink); }

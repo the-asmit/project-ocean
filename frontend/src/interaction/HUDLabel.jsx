@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useVisualizationState } from '../state/useVisualizationState.js'
+import { useHeatPotential } from '../state/useHeatPotential.js'
+import { sampleHeat, THRESHOLD } from '../scene/heatPotential.js'
 
 // Screen-space HUD: a thin leader line from the 3D-projected hit point out to
 // an offset card. Drawn in a DOM overlay (crisp text, no texture atlas) and fed
@@ -22,7 +24,7 @@ function project(world, camera, w, h, v) {
   }
 }
 
-function Card({ pt, screen, pinned, box, units, dataset }) {
+function Card({ pt, screen, pinned, box, units, dataset, heat }) {
   const ax = screen.x
   const ay = screen.y
   // flip the leader to the other side when close to the right/top edge of the
@@ -45,6 +47,7 @@ function Card({ pt, screen, pinned, box, units, dataset }) {
     : null
   const shown = live ? (live.valid ? live.value : null) : pt.value
   const val = shown == null ? null : `${shown.toFixed(2)}`
+  const hp = heat ? sampleHeat(heat, dataset.map, pt.lon, pt.lat) : null
 
   return (
     <>
@@ -75,6 +78,15 @@ function Card({ pt, screen, pinned, box, units, dataset }) {
         )}
         <div><span className="k">lat </span>{pt.lat.toFixed(3)}°　<span className="k">lon </span>{pt.lon.toFixed(3)}°</div>
         <div><span className="k">{pt.kind === 'seafloor' ? 'seafloor' : 'depth'} </span>{pt.depthM.toFixed(0)} m</div>
+        {/* The operational number, when the cyclone layer is on. It is a
+            property of the whole column, not of the depth the cursor is at, so
+            it sits below the point readout rather than beside it. */}
+        {hp && (
+          <div className={`tchp${hp.over ? ' over' : ''}`}>
+            TCHP {hp.tchp.toFixed(0)} kJ/cm²
+            <span className="k"> · {hp.over ? 'above' : 'below'} the {THRESHOLD} threshold</span>
+          </div>
+        )}
         {/* which surface the number came from. The movable section plane draws
             over the block, so without this a reading off the plane and a
             reading off a cut face behind it are indistinguishable. */}
@@ -91,6 +103,11 @@ export default function HUDLabel({ cameraRef, hostRef }) {
   // moment a second variable existed. It comes off the loaded volume now.
   const units = useVisualizationState((s) => s.dataset?.meta.volume.units ?? '')
   const dataset = useVisualizationState((s) => s.dataset)
+  // Only while the cyclone layer is on: the card is small on purpose, and a
+  // number nobody asked for costs a line of it on every hover.
+  const showHeat = useVisualizationState((s) => s.showHeat)
+  const heatAll = useHeatPotential(dataset)
+  const heat = showHeat ? heatAll : null
   const [, force] = useState(0)
   const vec = useRef(new THREE.Vector3())
   const raf = useRef(0)
@@ -117,11 +134,11 @@ export default function HUDLabel({ cameraRef, hostRef }) {
   const items = []
   if (selected) {
     const s = project(selected.world, camera, w, h, vec.current)
-    if (!s.behind) items.push(<Card key="sel" pt={selected} screen={s} box={box} units={units} dataset={dataset} pinned />)
+    if (!s.behind) items.push(<Card key="sel" pt={selected} screen={s} box={box} units={units} dataset={dataset} heat={heat} pinned />)
   }
   if (hover && (!selected || hover.world[0] !== selected.world[0])) {
     const s = project(hover.world, camera, w, h, vec.current)
-    if (!s.behind) items.push(<Card key="hov" pt={hover} screen={s} box={box} units={units} dataset={dataset} />)
+    if (!s.behind) items.push(<Card key="hov" pt={hover} screen={s} box={box} units={units} dataset={dataset} heat={heat} />)
   }
 
   return <div className="hud-layer">{items}</div>

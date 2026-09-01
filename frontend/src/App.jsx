@@ -11,6 +11,7 @@ import { loadDataset } from './scene/dataset.js'
 import { isoRange } from './scene/isoRange.js'
 import { useVisualizationState } from './state/useVisualizationState.js'
 import { useColorScale } from './state/useColorScale.js'
+import { THRESHOLD } from './scene/heatPotential.js'
 import { DEFAULT_PALETTE } from './scene/colorScale.js'
 import { spanDecimals } from './ui/variableTerms.js'
 import { useCurrentsState, useCurrentsData } from './currents/useCurrentsState.js'
@@ -40,6 +41,7 @@ function SourceNote({ dataset }) {
   const westIndex = useVisualizationState((s) => s.westIndex)
   const showArgo = useVisualizationState((s) => s.showArgo)
   const showIso = useVisualizationState((s) => s.showIso)
+  const showHeat = useVisualizationState((s) => s.showHeat)
   const isoValue = useVisualizationState((s) => s.isoValue)
   const showCurrents = useCurrentsState((s) => s.showCurrents)
   const frame = useCurrentsState((s) => s.frame)
@@ -129,6 +131,17 @@ function SourceNote({ dataset }) {
       {showIso && (
         <span>
           Isosurface {isoValue.toFixed(2)} {v.units} — DERIVED from the {v.variable} volume
+        </span>
+      )}
+      {/* The operational layer. DERIVED, like the isosurface and for the same
+          reason — arithmetic on the same bytes the cut faces sample — but it
+          also has to disclose that the absolute number depends on a choice of
+          constants, so the formula is in the line rather than just the name. */}
+      {showHeat && <span className="dot">·</span>}
+      {showHeat && (
+        <span>
+          TCHP + D26 DERIVED — ρ·c_p∫(T−26)dz over the loaded volume, {THRESHOLD} kJ/cm²
+          the cited threshold
         </span>
       )}
       {/* Measured uo/vo on the tile's own dates, not a model of a model. */}

@@ -6,6 +6,7 @@ import DepthRuler from './DepthRuler.jsx'
 import SectionBadge from './SectionBadge.jsx'
 import SceneRail from './rail/SceneRail.jsx'
 import PinnedControls from '../interaction/PinnedControls.jsx'
+import HeatLegend from './HeatLegend.jsx'
 import TimelineControls from './TimelineControls.jsx'
 import { useCurrentsState, useCurrentsData } from '../currents/useCurrentsState.js'
 import { useVisualizationState } from '../state/useVisualizationState.js'
@@ -108,7 +109,10 @@ export default function ScenePanel({ dataset, cameraRef }) {
         </div>
 
         {/* Provenance on the canvas itself, not only in a panel — this said
-            SYNTHETIC FIELD while the spike ran and now names the real source */}
+            SYNTHETIC FIELD while the spike ran and now names the real source.
+            Chips stack from the bottom up so a second layer's legend does not
+            land on top of the first one's. */}
+        <div className="scene-chips">
         {showCurrents && currents.status === 'ready' && (
           <div className="flow-chip">
             REAL CURRENTS
@@ -123,6 +127,8 @@ export default function ScenePanel({ dataset, cameraRef }) {
             </em>
           </div>
         )}
+        <HeatLegend dataset={dataset} />
+        </div>
 
         <div className="scene-foot">
           <TimelineControls dataset={dataset} />

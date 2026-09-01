@@ -119,6 +119,18 @@ export const useVisualizationState = create((set) => ({
   setShowGliders: (showGliders) => set({ showGliders }),
   setSelectedGliderId: (selectedGliderId) => set({ selectedGliderId }),
   setGliderStats: (gliderStats) => set({ gliderStats }),
+  // --- cyclone heat potential (D26 + TCHP) ------------------------------
+  // OPERATIONAL_LAYER_SPEC.md's flagship. One master toggle, because it is one
+  // operational question, with two sub-layers for the two ways of looking at
+  // the same answer: the warped D26 sheet inside the block and the TCHP field
+  // on its top. Off by default like every derived layer.
+  showHeat: false,
+  heatD26: true,
+  heatField: true,
+  setShowHeat: (showHeat) => set({ showHeat }),
+  setHeatD26: (heatD26) => set({ heatD26 }),
+  setHeatField: (heatField) => set({ heatField }),
+
   // --- isosurface (marching cubes over the same volume) -----------------
   // Off by default: it is a derived layer, and nothing about an existing
   // view should change until the user asks for it. The value is set to the
