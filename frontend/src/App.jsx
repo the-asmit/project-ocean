@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
 import AppBar from './ui/AppBar.jsx'
 import ScenePanel from './ui/ScenePanel.jsx'
+import Minimap from './ui/Minimap.jsx'
 import TransectChart from './charts/TransectChart.jsx'
 import ProfileChart from './charts/ProfileChart.jsx'
 import ComparisonPanel from './charts/ComparisonPanel.jsx'
@@ -20,6 +21,16 @@ import { useHashRoute } from './router.js'
 // in the Explorer bundle, so both load on demand.
 const DocsPage = lazy(() => import('./pages/DocsPage.jsx'))
 const RoadmapPage = lazy(() => import('./pages/RoadmapPage.jsx'))
+
+// Two ISO dates as one range, dropping the repeated year: an Argo window and a
+// glider deployment both sit inside one year in every real case, and
+// "2026-06-01–2026-06-21" spends ten characters saying 2026 twice.
+function span(from, to) {
+  if (!from || !to) return `${from ?? ''}–${to ?? ''}`
+  return from.slice(0, 4) === to.slice(0, 4)
+    ? `${from}–${to.slice(5)}`
+    : `${from}–${to}`
+}
 
 // P3: the synthetic-vs-real disclosure is not optional and not decoration. It
 // lives in the footer now — always on screen, never behind a panel.
@@ -51,107 +62,102 @@ function SourceNote({ dataset }) {
     sliced && 'top face',
     westSliced && 'west face',
   ].filter(Boolean).join(' and ')
+
+  // Colour choices are three separate facts but one sentence; as three clauses
+  // they cost three separators and a wrap.
+  const scaleBits = [
+    paletteId !== DEFAULT_PALETTE && scale.palette.label,
+    scale.custom && `custom ${scale.lo.toFixed(spanDecimals(scale.hi - scale.lo))}`
+      + `–${scale.hi.toFixed(spanDecimals(scale.hi - scale.lo))} ${v.units}`,
+    scale.log && 'log',
+  ].filter(Boolean)
+
   return (
     <>
       <span className="src">
         <b>SOURCE</b>&ensp;{v.variableLabel} ({v.variable}
-        {v.unitsAttr ? `, CF units ${v.unitsAttr}` : ''}) and seafloor: real{' '}
-        {v.source} / Copernicus Marine
+        {v.unitsAttr ? `, CF ${v.unitsAttr}` : ''}) + seafloor: real{' '}
+        {v.source} / Copernicus
       </span>
       <span className="dot">·</span>
       <span className={showDetail && !sliced ? 'synth' : undefined}>
         {sliced || westSliced
-          ? `Sliced — ${cutNames} ${sliced && westSliced ? 'are' : 'is'} a REAL section through the field`
+          ? `Sliced — ${cutNames} ${sliced && westSliced ? 'are' : 'is'} REAL section`
             + (sliced ? ', stylized surface removed' : '')
           : showDetail
-            ? 'Block top face is STYLIZED shading, not imagery — cut faces are real data'
+            ? 'Top face STYLIZED, not imagery; cut faces are real'
             : 'Stylized top face OFF — every rendered face is data'}
       </span>
       <span className="dot">·</span>
-      <span>1/12° ≈ 9 km grid</span>
-      {/* Real instruments now. The claim that matters is provenance and the
+      <span>1/12° ≈ 9 km</span>
+      {/* Real instruments. The claim that matters is provenance and the
           window, because an Argo float does not profile on the model's date. */}
       {showArgo && argo.status === 'ready' && <span className="dot">·</span>}
       {showArgo && argo.status === 'ready' && (
         <span>
-          Argo: {argo.floats.length} REAL float{argo.floats.length === 1 ? '' : 's'} from{' '}
-          {argo.meta?.source}, profiled {argo.meta?.windowFrom}–{argo.meta?.windowTo}
-          {' '}(±{argo.meta?.windowDays} d of the tile date)
+          {argo.meta?.source}: {argo.floats.length} REAL float{argo.floats.length === 1 ? '' : 's'},{' '}
+          {span(argo.meta?.windowFrom, argo.meta?.windowTo)}
+          {' '}(±{argo.meta?.windowDays} d)
         </span>
       )}
       {showArgo && argo.status === 'empty' && <span className="dot">·</span>}
       {showArgo && argo.status === 'empty' && (
-        <span>No Argo float in this tile ±{argo.meta?.windowDays ?? 10} d — layer is empty, not hidden</span>
+        <span>No Argo float here ±10 d — empty, not hidden</span>
       )}
       {showGliders && <span className="dot">·</span>}
       {showGliders && (
         <span>
           {gliderStats
-            ? `Glider ${gliderStats.deployment}: REAL ${gliderStats.meta?.source} track, `
-              + `${gliderStats.meta?.dateFrom}–${gliderStats.meta?.dateTo}, `
-              + `${gliderStats.meta?.dives} dives, ${gliderStats.meta?.rowsKept.toLocaleString()} of `
-              + `${gliderStats.meta?.rowsRaw.toLocaleString()} samples drawn — no QC flags in source`
+            ? `Glider ${gliderStats.deployment}: REAL ${gliderStats.meta?.source}, `
+              + `${span(gliderStats.meta?.dateFrom, gliderStats.meta?.dateTo)}, `
+              + `${gliderStats.meta?.dives} dives, `
+              + `${gliderStats.meta?.rowsKept.toLocaleString()}/`
+              + `${gliderStats.meta?.rowsRaw.toLocaleString()} pts, no QC in source`
+              // Half of a 1000 m glider dive is below the model's own extent.
+              + (gliderStats.meta?.deeperThanModel > 0
+                ? `, ${(gliderStats.meta.deeperThanModel * 100).toFixed(0)}% below the `
+                  + `${gliderStats.meta.modelMaxDepthM?.toFixed(0)} m extent`
+                : '')
             : gliders.status === 'empty'
-              ? 'No glider deployment in this tile — layer is empty, not hidden'
+              ? 'No glider deployment here — empty, not hidden'
               : 'Gliders: OceanGliders GDAC'}
         </span>
       )}
-      {/* Half of a 1000 m glider dive is below the model's own extent. */}
-      {showGliders && gliderStats?.meta?.deeperThanModel > 0 && (
-        <span className="dot">·</span>
-      )}
-      {showGliders && gliderStats?.meta?.deeperThanModel > 0 && (
-        <span>
-          {(gliderStats.meta.deeperThanModel * 100).toFixed(0)}% of that track is deeper than the{' '}
-          {gliderStats.meta.modelMaxDepthM?.toFixed(0)} m model extent
-        </span>
-      )}
       {/* The isosurface is DERIVED, not synthetic and not stylized: marching
-          cubes over the same bytes the cut faces sample. It says which, so it
-          is never lumped in with the two disclosures either side of it. */}
+          tetrahedra over the same bytes the cut faces sample. */}
       {showIso && <span className="dot">·</span>}
       {showIso && (
         <span>
-          Isosurface {isoValue.toFixed(2)} {v.units} — REAL structure derived
-          from the same {v.source} {v.variable} volume
+          Isosurface {isoValue.toFixed(2)} {v.units} — DERIVED from the {v.variable} volume
         </span>
       )}
-      {/* Real now. The spike's SYNTHETIC warning is gone because the claim it
-          guarded is gone — these are measured uo/vo on the tile's own dates. */}
+      {/* Measured uo/vo on the tile's own dates, not a model of a model. */}
       {showCurrents && currents.status === 'ready' && <span className="dot">·</span>}
       {showCurrents && currents.status === 'ready' && (
         <span>
-          Flow lines: REAL {currents.meta.source} uo/vo, {currents.meta.dates[
-            Math.min(frame, currents.meta.dates.length - 1)]} — traced through
-          the measured field
+          Flow: REAL uo/vo {currents.meta.dates[
+            Math.min(frame, currents.meta.dates.length - 1)]}, traced through the
+          measured field
         </span>
       )}
       {/* Colour mapping, when it is no longer the one this variable ships
           with. The SCALE panel's badge says the same thing, but a screenshot
           of the 3D view alone would otherwise carry no record that these
-          colours mean something other than the default. Silent when both are
-          at their defaults, which is the ordinary case. */}
-      {paletteId !== DEFAULT_PALETTE && <span className="dot">·</span>}
-      {paletteId !== DEFAULT_PALETTE && (
-        <span>Palette: {scale.palette.label}</span>
-      )}
-      {scale.custom && <span className="dot">·</span>}
-      {scale.custom && (
-        <span>
-          Custom range {scale.lo.toFixed(spanDecimals(scale.hi - scale.lo))}–
-          {scale.hi.toFixed(spanDecimals(scale.hi - scale.lo))} {v.units}
-        </span>
-      )}
-      {/* scale.log, not the store's logScale: a request that was refused for
-          a non-positive minimum leaves the colours linear, and the footer
-          describes what is on screen. */}
-      {scale.log && <span className="dot">·</span>}
-      {scale.log && <span>Log colour scale</span>}
+          colours mean something other than the default. */}
+      {scaleBits.length > 0 && <span className="dot">·</span>}
+      {scaleBits.length > 0 && <span>Scale: {scaleBits.join(' · ')}</span>}
       <span className="dot opt">·</span>
-      <span className="opt">Depth axis non-linearly exaggerated (curve {curve})</span>
+      <span className="opt">Depth axis exaggerated (curve {curve})</span>
+      {/* Inline rather than pushed right by a flex spacer: a `flex: 1 1 auto`
+          item in a WRAPPING flex row eats the rest of its line and shunts what
+          follows onto a new one, which cost the footer a whole row in every
+          state including the default. */}
+      <span className="dot opt">·</span>
+      <span className="opt">WGS 84 · EPSG:4326</span>
     </>
   )
 }
+
 
 export default function App() {
   const route = useHashRoute()
@@ -248,6 +254,10 @@ export default function App() {
           scene gets the full width and what is left outside it is read-only:
           the charts, and the provenance strip. */}
       <div className="center">
+        {/* Two windows in the top row, as before the restructure: where the
+            tile is, and the tile. The map is a sibling panel rather than an
+            overlay — it is a working surface you drag on, not a legend. */}
+        <Minimap dataset={dataset} cameraRef={cameraRef} />
         <ScenePanel dataset={dataset} cameraRef={cameraRef} />
         {/* Read-only outside the canvas: the numbers under the pin, then the
             three charts. Model-vs-float is a permanent panel rather than
@@ -263,8 +273,6 @@ export default function App() {
 
       <footer className="appfoot">
         <SourceNote dataset={dataset} />
-        <span className="spacer" />
-        <span className="opt">WGS 84 · EPSG:4326</span>
       </footer>
     </div>
   )

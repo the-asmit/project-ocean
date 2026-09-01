@@ -140,16 +140,25 @@ canvas { display: block; touch-action: none; }
      and the number of them grows with every layer the user turns on, so the
      bar takes a second line rather than truncating. */
   display: flex; align-items: center; flex-wrap: wrap;
-  column-gap: 14px; row-gap: 1px;
-  min-height: 26px; padding: 4px 12px; background: var(--s-2);
-  font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
+  column-gap: 9px; row-gap: 1px;
+  /* TWO LINES ARE RESERVED. The row is `auto` in the app grid, so the bar
+     growing from one line to two shrank the content row under it and the
+     WebGL buffer resized ~150 ms after the CSS did — a stale-buffer window
+     that read as the whole UI ghosting. Reserving the second line removes
+     the state change that caused it. */
+  min-height: 40px; padding: 4px 12px; background: var(--s-2);
+  font-family: var(--mono); font-size: 9px; color: var(--ink-3);
   letter-spacing: .04em;
 }
-/* nowrap flex items still shrink past their content and collide, so pin them */
-.appfoot > * { flex: 0 0 auto; }
+/* Clauses may shrink and wrap INTERNALLY rather than each claiming a whole
+   line at max-content width — a 137-character glider disclosure otherwise
+   takes most of a row and leaves the rest of it empty. `.src` stays at
+   flex: 0 0 auto below: it is the one nowrap + ellipsis item, and a
+   shrinkable nowrap item collides with its neighbour instead of wrapping. */
+.appfoot > * { flex: 0 1 auto; }
 .appfoot .spacer { flex: 1 1 auto; min-width: 0; }
 .appfoot .src {
-  flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2);
+  flex: 0 0 auto; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2);
 }
 .appfoot .src b { color: var(--pin); font-weight: 500; letter-spacing: .08em; }
 .appfoot .synth { color: var(--pin); }
@@ -1114,17 +1123,19 @@ kbd {
 .app:not(.page) { grid-template-columns: minmax(0, 1fr); }
 .center {
   grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 1fr);
+  /* MAP | 3D VOLUME across the top, the charts across the bottom — the
+     pre-restructure arrangement. The map is a surface you drag on to load
+     a tile, so it gets a window rather than a corner of someone else's. */
+  grid-template-columns: 314px minmax(0, 1fr);
   /* The original dashboard's row weight, restored. The canvas being
      full-width is the change this pass makes; making it taller as well took
      the whole viewport, which was not the ask. */
   grid-template-rows: minmax(0, 1.42fr) minmax(0, 1fr);
 }
-.scene-panel { grid-column: 1; grid-row: 1; }
+.scene-panel { grid-column: 2; grid-row: 1; }
 .charts {
-  grid-column: 1; grid-row: 2;
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1px; background: var(--line);
+  grid-column: 1 / -1; grid-row: 2;
+  display: grid; gap: 1px; background: var(--line);
 }
 
 /* The scene host is the positioning context for the rail, so its overlays keep
@@ -1147,41 +1158,6 @@ kbd {
   .scene-host.rail-open { --rail-w: 326px; }
   .pinned-controls { width: 200px; }
 }
-
-/* --- the right-hand context column -------------------------------------- */
-/* Map, then legend, then the pinned readout below: where you are, what the
-   colours mean, what is under the pin. Stacked in one flow so the legend
-   cannot collide with a map whose height follows the tile's aspect ratio. */
-.scene-context {
-  position: absolute; right: 10px; top: 9px; z-index: 7;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
-  pointer-events: none;
-}
-.scene-context > * { pointer-events: auto; }
-.scene-context .scene-legend { position: static; pointer-events: none; }
-
-/* --- the map, permanent in the corner of the view ----------------------- */
-/* Not behind a rail toggle: "where am I" is continuous context rather than a
-   question you go and ask, and the drag that loads a new tile happens here. */
-.mm-thumb {
-  position: static;
-  width: 214px; padding: 7px 8px 8px;
-  display: flex; flex-direction: column; gap: 7px;
-  background: var(--s-1); border: 1px solid var(--line-2);
-  border-radius: var(--r); box-shadow: var(--shadow);
-}
-.mm-thumb-head {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
-}
-.mm-thumb-head .lbl { white-space: nowrap; flex: none; }
-.mm-thumb-where {
-  font-family: var(--mono); font-size: 8px; color: var(--ink-4);
-  letter-spacing: .01em; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; min-width: 0;
-  font-variant-numeric: tabular-nums;
-}
-.mm-thumb .mm-pick { line-height: 1.45; }
-.mm-thumb .mm-n { top: 5px; right: 6px; }
 
 /* ===========================================================================
    The charts row — read-only, outside the canvas

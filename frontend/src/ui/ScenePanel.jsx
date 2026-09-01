@@ -6,7 +6,6 @@ import DepthRuler from './DepthRuler.jsx'
 import SectionControls from './SectionControls.jsx'
 import SectionBadge from './SectionBadge.jsx'
 import SceneRail from './rail/SceneRail.jsx'
-import Minimap from './Minimap.jsx'
 import PinnedControls from '../interaction/PinnedControls.jsx'
 import TimelineControls from './TimelineControls.jsx'
 import { useCurrentsState, useCurrentsData } from '../currents/useCurrentsState.js'
@@ -120,17 +119,11 @@ export default function ScenePanel({ dataset, cameraRef }) {
           </div>
         )}
 
-        {/* Where you are, then what the colours mean. The map is permanent
-            rather than behind a rail toggle: it answers a question you have
-            continuously, and the drag that loads a new tile happens on it. */}
-        <div className="scene-context">
-          <Minimap dataset={dataset} cameraRef={cameraRef} compact />
-          <div className="scene-legend">
-            <span><i style={{ background: '#4fc3f7' }} /> cursor</span>
-            <span><i style={{ background: '#ffc46b' }} /> pinned</span>
-            <span><i style={{ background: '#0d1729' }} /> no data below {dataset.meta.volume.maxDepthM.toFixed(0)} m</span>
-            <span><i style={{ background: '#2b3038' }} /> below seafloor</span>
-          </div>
+        <div className="scene-legend">
+          <span><i style={{ background: '#4fc3f7' }} /> cursor</span>
+          <span><i style={{ background: '#ffc46b' }} /> pinned</span>
+          <span><i style={{ background: '#0d1729' }} /> no data below {dataset.meta.volume.maxDepthM.toFixed(0)} m</span>
+          <span><i style={{ background: '#2b3038' }} /> below seafloor</span>
         </div>
 
         {/* Provenance on the canvas itself, not only in a panel — this said
