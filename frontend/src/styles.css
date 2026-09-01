@@ -817,3 +817,192 @@ kbd {
 .subject-switch button:first-child.on {
   background: var(--accent-dim); border-color: var(--accent-line); color: var(--accent);
 }
+
+/* ===========================================================================
+   Pages — Explorer / Docs / Roadmap
+   ---------------------------------------------------------------------------
+   Explorer is the instrument console above. Docs and Roadmap are documents, so
+   they get document typography — Inter at a readable size over a measure, not
+   9.5px mono in a rail. Same surfaces and same hairlines, so they read as the
+   same product rather than a website bolted onto one.
+   =========================================================================== */
+
+.topnav { display: flex; gap: 2px; margin-left: 16px; flex: none; }
+.topnav a {
+  padding: 5px 11px; border-radius: 4px; text-decoration: none;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3);
+  border: 1px solid transparent;
+  transition: color .14s var(--ease), background .14s var(--ease),
+              border-color .14s var(--ease);
+}
+.topnav a:hover { color: var(--ink); background: var(--s-3); }
+.topnav a.on {
+  color: var(--accent); background: var(--accent-dim); border-color: var(--accent-line);
+}
+
+/* A document page drops the rails and the footer: one column, header + body. */
+.app.page { grid-template-columns: minmax(0, 1fr); grid-template-rows: 46px minmax(0, 1fr); }
+.page-body { grid-column: 1 / -1; min-height: 0; overflow: hidden; background: var(--s-1); }
+.page-load {
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+}
+
+/* --- Docs --------------------------------------------------------------- */
+.docs {
+  display: grid; grid-template-columns: 272px minmax(0, 1fr);
+  gap: 1px; background: var(--line);
+}
+.docs-toc { background: var(--s-1); overflow-y: auto; padding: 15px 0 48px; }
+.docs-toc-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px; padding: 0 16px 11px;
+}
+.docs-meta { font-family: var(--mono); font-size: 9px; color: var(--ink-4); }
+.docs-toc nav { display: flex; flex-direction: column; }
+.docs-toc a {
+  /* block, not the flex child they used to be: the anchors are nested inside a
+     .toc-grp now, so without this they lay out inline and spill sideways */
+  display: block;
+  padding: 4px 16px; text-decoration: none; line-height: 1.45;
+  font-size: 11.5px; color: var(--ink-3);
+  border-left: 2px solid transparent;
+  transition: color .12s var(--ease), background .12s var(--ease);
+}
+.docs-toc a:hover { color: var(--ink-2); background: var(--s-2); }
+.docs-toc a.on {
+  color: var(--accent); background: var(--accent-dim); border-left-color: var(--accent);
+}
+.docs-toc a.lvl1 { font-size: 11.5px; }
+.docs-toc .toc-grp.open > a.lvl1 { color: var(--ink); }
+.docs-toc a.lvl2 {
+  padding: 3px 16px 3px 30px; font-size: 10.5px; color: var(--ink-4);
+}
+.docs-toc a.lvl2:hover { color: var(--ink-3); }
+.docs-toc a.lvl2.on { color: var(--accent); }
+.docs-toc .toc-grp.open { padding-bottom: 6px; }
+
+.docs-body {
+  background: var(--s-1); overflow-y: auto;
+  /* centre a 1040px column once the pane is wider than it: prose keeps its own
+     measure inside that, and a wide table still gets the full width before it
+     falls back to its own scroller */
+  padding: 34px max(44px, calc((100% - 1040px) / 2)) 140px;
+  font-family: var(--sans);
+}
+/* A measure for prose; tables and code blocks are allowed the full column,
+   because this document is largely wide tables and squeezing them to 84ch
+   would put every one of them in a horizontal scroller. */
+.docs-body > :is(p, ul, ol, blockquote, h3, h4, h5, h6) { max-width: 84ch; }
+.docs-body :is(h1, h2) { scroll-margin-top: 16px; color: var(--ink); }
+.docs-body h1 {
+  font-size: 22px; font-weight: 600; letter-spacing: -.01em;
+  margin: 52px 0 15px; padding-bottom: 10px; border-bottom: 1px solid var(--line-2);
+}
+.docs-body h1:first-child { margin-top: 0; }
+.docs-body h2 { font-size: 16px; font-weight: 600; margin: 34px 0 11px; }
+.docs-body h3 { font-size: 13.5px; font-weight: 600; margin: 24px 0 8px; color: var(--ink-2); }
+.docs-body h4 { font-size: 12.5px; font-weight: 600; margin: 18px 0 6px; color: var(--ink-2); }
+.docs-body :is(p, li) { font-size: 13.5px; line-height: 1.72; color: var(--ink-2); }
+.docs-body p { margin: 0 0 13px; }
+.docs-body :is(ul, ol) { margin: 0 0 13px; padding-left: 22px; }
+.docs-body li { margin-bottom: 5px; }
+.docs-body strong { color: var(--ink); font-weight: 600; }
+.docs-body em { color: var(--ink-2); }
+.docs-body a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-line); }
+.docs-body a:hover { border-bottom-color: var(--accent); }
+.docs-body hr { border: 0; border-top: 1px solid var(--line); margin: 40px 0; }
+.docs-body blockquote {
+  margin: 0 0 15px; padding: 2px 0 2px 15px;
+  border-left: 2px solid var(--accent-line); color: var(--ink-3);
+}
+.docs-body blockquote p:last-child { margin-bottom: 0; }
+.docs-body table {
+  display: block; max-width: 100%; overflow-x: auto;
+  border-collapse: collapse; margin: 0 0 17px; font-size: 12.5px;
+}
+.docs-body :is(th, td) {
+  border: 1px solid var(--line); padding: 6px 11px;
+  text-align: left; vertical-align: top; line-height: 1.6;
+}
+.docs-body th { background: var(--s-2); color: var(--ink-2); font-weight: 500; white-space: nowrap; }
+.docs-body td { color: var(--ink-2); }
+.docs-body code {
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink);
+  background: var(--s-2); border: 1px solid var(--line);
+  border-radius: 3px; padding: 1px 5px;
+}
+.docs-body pre {
+  background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 12px 14px; margin: 0 0 15px; overflow-x: auto;
+}
+.docs-body pre code {
+  background: none; border: 0; padding: 0;
+  font-size: 11.5px; line-height: 1.66; color: var(--ink-2);
+}
+
+/* --- Roadmap ------------------------------------------------------------ */
+.roadmap { overflow-y: auto; background: var(--s-1); font-family: var(--sans); }
+.rm-inner { max-width: 1020px; margin: 0 auto; padding: 38px 32px 130px; }
+.rm-head h1 {
+  margin: 0 0 11px; font-size: 24px; font-weight: 600;
+  letter-spacing: -.012em; color: var(--ink);
+}
+.rm-lede { margin: 0; max-width: 80ch; font-size: 13.5px; line-height: 1.72; color: var(--ink-2); }
+.rm-lede b { color: var(--ink); font-weight: 600; }
+.rm-sec { margin-top: 46px; }
+.rm-sec > h2 {
+  margin: 0 0 11px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3);
+}
+.rm-note { margin: 0 0 16px; max-width: 82ch; font-size: 12.5px; line-height: 1.7; color: var(--ink-3); }
+.rm-note code {
+  font-family: var(--mono); font-size: 11px; color: var(--ink-2);
+  background: var(--s-2); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px;
+}
+.rm-note a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-line); }
+
+.rm-list, .rm-arch {
+  border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+  background: var(--line); display: grid; gap: 1px;
+}
+.rm-arch { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.rm-item, .rm-card { background: var(--s-1); padding: 14px 16px; }
+.rm-item-head { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+.rm-n {
+  flex: none; width: 15px; font-family: var(--mono);
+  font-size: 10px; color: var(--ink-4); font-variant-numeric: tabular-nums;
+}
+.rm-item h3 {
+  flex: 1 1 auto; margin: 0; font-size: 13px; font-weight: 500;
+  line-height: 1.45; color: var(--ink);
+}
+.rm-item p { margin: 0 0 0 25px; font-size: 12.5px; line-height: 1.68; color: var(--ink-3); }
+.rm-card .lbl { display: block; margin-bottom: 8px; }
+.rm-card p { margin: 0; font-size: 12.5px; line-height: 1.68; color: var(--ink-3); }
+.rm-card :is(code, em) { color: var(--ink-2); font-style: normal; }
+.rm-card code { font-family: var(--mono); font-size: 11px; }
+
+/* Status of a capability against the implementation — deliberately NOT the
+   REAL/SOON/DERIVED vocabulary, which means data provenance and must not be
+   diluted into meaning "build status" as well. */
+.badge.tag-live {
+  color: #7fd4a8; border-color: rgba(127, 212, 168, .42); background: rgba(127, 212, 168, .12);
+}
+.badge.tag-partial { color: var(--pin); border-color: var(--pin-line); background: var(--pin-dim); }
+.badge.tag-planned { color: var(--ink-4); }
+
+.rm-md :is(p, li) { font-size: 12.5px; line-height: 1.7; color: var(--ink-3); }
+.rm-md ul { margin: 0 0 12px; padding-left: 20px; }
+.rm-md li { margin-bottom: 7px; }
+.rm-md strong { color: var(--ink-2); font-weight: 600; }
+.rm-md p:last-child { margin-bottom: 0; }
+
+@media (max-width: 900px) {
+  .docs { grid-template-columns: minmax(0, 1fr); }
+  .docs-toc { display: none; }
+  .docs-body { padding: 26px 20px 100px; }
+  .rm-inner { padding: 28px 20px 100px; }
+}

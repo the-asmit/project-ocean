@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import AppBar from './ui/AppBar.jsx'
 import ScenePanel from './ui/ScenePanel.jsx'
 import Minimap from './ui/Minimap.jsx'
@@ -17,6 +17,12 @@ import { DEFAULT_PALETTE } from './scene/colorScale.js'
 import { spanDecimals } from './ui/variableTerms.js'
 import { useCurrentsState, useCurrentsData } from './currents/useCurrentsState.js'
 import { useArgoState, useGliderTracks } from './observations/useObservations.js'
+import { useHashRoute } from './router.js'
+
+// Docs carries 250 kB of Markdown and Roadmap pulls in the spec; neither belongs
+// in the Explorer bundle, so both load on demand.
+const DocsPage = lazy(() => import('./pages/DocsPage.jsx'))
+const RoadmapPage = lazy(() => import('./pages/RoadmapPage.jsx'))
 
 // P3: the synthetic-vs-real disclosure is not optional and not decoration. It
 // lives in the footer now — always on screen, never behind a panel.
@@ -151,6 +157,7 @@ function SourceNote({ dataset }) {
 }
 
 export default function App() {
+  const route = useHashRoute()
   const dataset = useVisualizationState((s) => s.dataset)
   const setDataset = useVisualizationState((s) => s.setDataset)
   const loadError = useVisualizationState((s) => s.loadError)
@@ -194,6 +201,20 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [clearSelected, goHome])
 
+  // Routed AFTER every hook, so the hook count never changes between renders.
+  // The tile keeps loading in the background while a page is open, which is why
+  // switching back to Explorer is instant.
+  if (route === 'docs' || route === 'roadmap') {
+    return (
+      <div className="app page">
+        <AppBar dataset={dataset} route={route} />
+        <Suspense fallback={<div className="page-body page-load">Loading…</div>}>
+          {route === 'docs' ? <DocsPage /> : <RoadmapPage />}
+        </Suspense>
+      </div>
+    )
+  }
+
   if (loadError && !dataset) {
     return (
       <div className="err">
@@ -224,7 +245,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <AppBar dataset={dataset} />
+      <AppBar dataset={dataset} route={route} />
 
       <div className="rail left">
         <DataLayersPanel dataset={dataset} />
