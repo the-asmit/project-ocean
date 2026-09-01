@@ -5,7 +5,8 @@ import {
 } from 'recharts'
 import Panel from '../ui/Panel.jsx'
 import { useVisualizationState } from '../state/useVisualizationState.js'
-import { sampleTransect, isothermDepths, isothermValues, rampColor } from './sampling.js'
+import { sampleTransect, isothermDepths, isothermValues } from './sampling.js'
+import { useColorScale } from '../state/useColorScale.js'
 import { sampleCurrentTransect, compass } from './currentsSampling.js'
 import { useCurrentsState, useCurrentsData } from '../currents/useCurrentsState.js'
 import SubjectSwitch, { usePanelSubject } from './SubjectSwitch.jsx'
@@ -108,6 +109,7 @@ function FlowTransect({ dataset, rows, lengthKm, lat, from, depthM, frameDate, s
 }
 
 export default function TransectChart({ dataset }) {
+  const scale = useColorScale(dataset)
   const selected = useVisualizationState((s) => s.selected)
   const hover = useVisualizationState((s) => s.hover)
   const [showIso, setShowIso] = useState(true)
@@ -237,7 +239,7 @@ export default function TransectChart({ dataset }) {
           {isos.map((val) => (
             <Line
               key={val} type="monotone" dataKey={isoKey(val)} name={String(val)}
-              stroke={rampColor((val - v.valueMin) / (v.valueMax - v.valueMin))}
+              stroke={scale.css(val)}
               strokeWidth={1.4} dot={false} connectNulls={false} isAnimationActive={false}
             />
           ))}

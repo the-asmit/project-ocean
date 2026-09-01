@@ -20,7 +20,12 @@ const API = '/api'
 // smear the whole basin into one tangle.
 export const STEP_SECONDS = 7400
 export const STEPS = 34
-export const SEEDS = 420
+// Seeds are a jittered square grid, so this is (13 x 13). 420 was far too many:
+// at 21 x 21 the spacing between seeds (~19 world units) was SHORTER than the
+// lines themselves (~28 units for a 46 km arc), so every line overlapped its
+// neighbours and the layer read as stipple rather than flow. At 13 x 13 the
+// spacing is ~33 units and each line sits clear of the next.
+export const SEEDS = 169
 
 export async function loadCurrents(region, date) {
   const q = `region=${encodeURIComponent(region)}&date=${date}`

@@ -12,7 +12,11 @@ import { IconAlert } from './ui/icons.jsx'
 import { loadDataset } from './scene/dataset.js'
 import { isoRange } from './scene/isoRange.js'
 import { useVisualizationState } from './state/useVisualizationState.js'
+import { useColorScale } from './state/useColorScale.js'
+import { DEFAULT_PALETTE } from './scene/colorScale.js'
+import { spanDecimals } from './ui/variableTerms.js'
 import { useCurrentsState, useCurrentsData } from './currents/useCurrentsState.js'
+import { useArgoState, useGliderTracks } from './observations/useObservations.js'
 
 // P3: the synthetic-vs-real disclosure is not optional and not decoration. It
 // lives in the footer now — always on screen, never behind a panel.
@@ -26,6 +30,12 @@ function SourceNote({ dataset }) {
   const showCurrents = useCurrentsState((s) => s.showCurrents)
   const frame = useCurrentsState((s) => s.frame)
   const currents = useCurrentsData(dataset)
+  const showGliders = useVisualizationState((s) => s.showGliders)
+  const gliderStats = useVisualizationState((s) => s.gliderStats)
+  const argo = useArgoState(dataset)
+  const gliders = useGliderTracks(dataset)
+  const paletteId = useVisualizationState((s) => s.palette)
+  const scale = useColorScale(dataset)
   const v = dataset.meta.volume
   const curve = dataset.meta.bathymetry.depthCurve
   // Slicing replaces the stylized top face with a real horizontal section, so
@@ -56,8 +66,43 @@ function SourceNote({ dataset }) {
       </span>
       <span className="dot">·</span>
       <span>1/12° ≈ 9 km grid</span>
-      {showArgo && <span className="dot">·</span>}
-      {showArgo && <span className="synth">Argo floats are SYNTHETIC (mock source)</span>}
+      {/* Real instruments now. The claim that matters is provenance and the
+          window, because an Argo float does not profile on the model's date. */}
+      {showArgo && argo.status === 'ready' && <span className="dot">·</span>}
+      {showArgo && argo.status === 'ready' && (
+        <span>
+          Argo: {argo.floats.length} REAL float{argo.floats.length === 1 ? '' : 's'} from{' '}
+          {argo.meta?.source}, profiled {argo.meta?.windowFrom}–{argo.meta?.windowTo}
+          {' '}(±{argo.meta?.windowDays} d of the tile date)
+        </span>
+      )}
+      {showArgo && argo.status === 'empty' && <span className="dot">·</span>}
+      {showArgo && argo.status === 'empty' && (
+        <span>No Argo float in this tile ±{argo.meta?.windowDays ?? 10} d — layer is empty, not hidden</span>
+      )}
+      {showGliders && <span className="dot">·</span>}
+      {showGliders && (
+        <span>
+          {gliderStats
+            ? `Glider ${gliderStats.deployment}: REAL ${gliderStats.meta?.source} track, `
+              + `${gliderStats.meta?.dateFrom}–${gliderStats.meta?.dateTo}, `
+              + `${gliderStats.meta?.dives} dives, ${gliderStats.meta?.rowsKept.toLocaleString()} of `
+              + `${gliderStats.meta?.rowsRaw.toLocaleString()} samples drawn — no QC flags in source`
+            : gliders.status === 'empty'
+              ? 'No glider deployment in this tile — layer is empty, not hidden'
+              : 'Gliders: OceanGliders GDAC'}
+        </span>
+      )}
+      {/* Half of a 1000 m glider dive is below the model's own extent. */}
+      {showGliders && gliderStats?.meta?.deeperThanModel > 0 && (
+        <span className="dot">·</span>
+      )}
+      {showGliders && gliderStats?.meta?.deeperThanModel > 0 && (
+        <span>
+          {(gliderStats.meta.deeperThanModel * 100).toFixed(0)}% of that track is deeper than the{' '}
+          {gliderStats.meta.modelMaxDepthM?.toFixed(0)} m model extent
+        </span>
+      )}
       {/* The isosurface is DERIVED, not synthetic and not stylized: marching
           cubes over the same bytes the cut faces sample. It says which, so it
           is never lumped in with the two disclosures either side of it. */}
@@ -78,6 +123,27 @@ function SourceNote({ dataset }) {
           the measured field
         </span>
       )}
+      {/* Colour mapping, when it is no longer the one this variable ships
+          with. The SCALE panel's badge says the same thing, but a screenshot
+          of the 3D view alone would otherwise carry no record that these
+          colours mean something other than the default. Silent when both are
+          at their defaults, which is the ordinary case. */}
+      {paletteId !== DEFAULT_PALETTE && <span className="dot">·</span>}
+      {paletteId !== DEFAULT_PALETTE && (
+        <span>Palette: {scale.palette.label}</span>
+      )}
+      {scale.custom && <span className="dot">·</span>}
+      {scale.custom && (
+        <span>
+          Custom range {scale.lo.toFixed(spanDecimals(scale.hi - scale.lo))}–
+          {scale.hi.toFixed(spanDecimals(scale.hi - scale.lo))} {v.units}
+        </span>
+      )}
+      {/* scale.log, not the store's logScale: a request that was refused for
+          a non-positive minimum leaves the colours linear, and the footer
+          describes what is on screen. */}
+      {scale.log && <span className="dot">·</span>}
+      {scale.log && <span>Log colour scale</span>}
       <span className="dot opt">·</span>
       <span className="opt">Depth axis non-linearly exaggerated (curve {curve})</span>
     </>

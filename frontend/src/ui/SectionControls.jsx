@@ -4,7 +4,7 @@ import { useVisualizationState } from '../state/useVisualizationState.js'
 import { sliceStops, clipYForIndex, stopAt, westStops } from '../scene/sliceStops.js'
 import { isoRange } from '../scene/isoRange.js'
 import { IconCheck } from './icons.jsx'
-import { rampColor } from '../charts/sampling.js'
+import { useColorScale } from '../state/useColorScale.js'
 import { contourName, fmtStep } from './variableTerms.js'
 
 // The two slice controls and their companions, in ONE component.
@@ -36,6 +36,7 @@ function Slider({ label, value, min, max, step, format, onChange, hint }) {
 
 export default function SectionControls({ dataset, compact = false }) {
   const s = useVisualizationState()
+  const scale = useColorScale(dataset)
   const { bathyMaxM, depthCurve } = dataset.meta.bathymetry
   const maxDataM = dataset.meta.volume.maxDepthM
   const vol = dataset.meta.volume
@@ -80,10 +81,7 @@ export default function SectionControls({ dataset, compact = false }) {
   // colorbar clamp — offering a value the tile does not contain would give an
   // empty surface with no explanation.
   const iso = useMemo(() => isoRange(dataset), [dataset])
-  const isoSwatch = useMemo(() => rampColor(
-    (s.isoValue - dataset.meta.volume.valueMin)
-    / (dataset.meta.volume.valueMax - dataset.meta.volume.valueMin),
-  ), [dataset, s.isoValue])
+  const isoSwatch = scale.css(s.isoValue)
   const stats = s.isoStats
 
   // A new tile has a different range; an isovalue carried over from the old

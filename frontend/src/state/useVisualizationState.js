@@ -6,7 +6,28 @@ export const useVisualizationState = create((set) => ({
   region: 'bengal',         // Bay of Bengal, India east coast (has real coastline)
   date: '2026-06-11',   // near the end of the GLORYS12V1 archive (to 2026-06-23)
   variable: 'thetao',
-  setVariable: (variable) => set({ variable }),
+  // A custom colour range is expressed in the variable's own units, so it is
+  // meaningless the moment the variable changes — 32.5 is a plausible
+  // temperature and a plausible salinity, and carrying it across would silently
+  // reinterpret it.
+  setVariable: (variable) => set({ variable, customRange: null }),
+
+  // --- colour scale (the colorbar editor) -------------------------------
+  // Display choices, layered ON TOP of the per-variable range policy the
+  // backend bakes in (fixed for temperature, per-tile for salinity). None of
+  // this touches rangeMode, the derive path or the contour interval.
+  //
+  // Palette and log/linear are preferences and persist across tiles. The range
+  // is data-dependent and does not: it resets with the variable and with the
+  // region, and is clamped to the baked window at read time regardless, so a
+  // stale one can never widen the scale past what the volume actually carries.
+  palette: 'ocean',
+  setPalette: (palette) => set({ palette }),
+  logScale: false,
+  setLogScale: (logScale) => set({ logScale }),
+  customRange: null,          // [lo, hi] in the variable's units, or null
+  setCustomRange: (customRange) => set({ customRange }),
+  resetCustomRange: () => set({ customRange: null }),
   // A region is either a named tile or `bbox:lonMin,lonMax,latMin,latMax`.
   // World coordinates mean something different in every tile, so any pin or
   // hover from the old one has to go.
@@ -14,7 +35,21 @@ export const useVisualizationState = create((set) => ({
   // an index from the old one would point at a different depth in the new one.
   setRegion: (region) =>
     set({ region, selected: null, hover: null, depthClip: 0, clipIndex: 0,
-         westIndex: 0, selectedFloatId: null, isoStats: null }),
+         westIndex: 0, selectedFloatId: null, isoStats: null,
+         selectedGliderId: null, gliderStats: null, customRange: null }),
+
+  // Travel to a place AND time where a particular instrument actually operated.
+  // Region and date have to move together — a preset is one destination, and
+  // setting them separately would fire two tile loads, the first for a
+  // combination nobody asked for.
+  applyPreset: (preset) =>
+    set({
+      region: preset.region, date: preset.date,
+      selected: null, hover: null, depthClip: 0, clipIndex: 0, westIndex: 0,
+      selectedFloatId: null, isoStats: null,
+      selectedGliderId: null, gliderStats: null, customRange: null,
+      ...(preset.layer === 'gliders' ? { showGliders: true } : {}),
+    }),
 
   // True while a tile is being fetched/derived. The previously loaded dataset
   // stays on screen underneath — a frozen block with no feedback is worse than
@@ -56,9 +91,21 @@ export const useVisualizationState = create((set) => ({
   // specifically — it was named 'temperature' when thetao was the only one.
   panelLayer: 'field',         // 'field' | 'currents'
   setPanelLayer: (panelLayer) => set({ panelLayer }),
-  // in-situ observations (mock source for now — see ObservationSource.js)
+  // in-situ observations — REAL instruments now (see argoSource.js /
+  // gliderSource.js). Both can legitimately return nothing for a given tile
+  // and window, which the layers render as an explicit empty state.
   showArgo: true,
   selectedFloatId: null,
+  // Gliders are a separate layer because a track is a path, not a station.
+  // Off by default: loading one is a 4,000-point fetch, and no glider has ever
+  // operated near the default tile, so switching it on there would only ever
+  // show the empty state.
+  showGliders: false,
+  selectedGliderId: null,
+  gliderStats: null,
+  setShowGliders: (showGliders) => set({ showGliders }),
+  setSelectedGliderId: (selectedGliderId) => set({ selectedGliderId }),
+  setGliderStats: (gliderStats) => set({ gliderStats }),
   // --- isosurface (marching cubes over the same volume) -----------------
   // Off by default: it is a derived layer, and nothing about an existing
   // view should change until the user asks for it. The value is set to the

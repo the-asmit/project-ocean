@@ -256,6 +256,41 @@ canvas { display: block; touch-action: none; }
   border-radius: 3px; padding: 1px 4px; flex: none;
 }
 
+/* Observation layer status ------------------------------------------------
+   These layers are backed by third-party services, so "nothing here" and
+   "could not reach it" are different answers and both have to be legible. */
+.obs-note {
+  margin: 8px 0 0; font-size: 10px; line-height: 1.55; color: var(--ink-3);
+}
+.obs-note.bad { color: var(--bad); }
+.obs-note.empty {
+  margin-top: 8px; padding: 8px 9px;
+  border: 1px solid var(--line-2); border-radius: var(--r);
+  background: var(--s-2); color: var(--ink-3);
+  font-size: 10px; line-height: 1.55;
+}
+.obs-note.empty b { color: var(--ink-2); font-weight: 500; }
+.obs-picker { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.obs-picker .obs-note { margin: 0 0 2px; }
+
+/* Travel to where the data actually is. Deliberately looks like an action, not
+   a layer toggle: it changes both the region AND the date. */
+.preset {
+  margin-top: 8px; width: 100%; display: flex; flex-direction: column; gap: 2px;
+  padding: 9px 10px; text-align: left; cursor: pointer;
+  border: 1px solid var(--accent-line); border-radius: var(--r);
+  background: var(--accent-dim); color: var(--ink-2);
+  transition: background .14s var(--ease), border-color .14s var(--ease);
+}
+.preset:hover { background: rgba(79, 195, 247, .2); border-color: var(--accent); }
+.preset-go {
+  font-family: var(--mono); font-size: 8px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--accent);
+}
+.preset-label { font-size: 11px; color: var(--ink); }
+.preset-sub { font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); }
+.preset-why { font-size: 9.5px; line-height: 1.5; color: var(--ink-3); margin-top: 3px; }
+
 /* slider ----------------------------------------------------------------- */
 .srow { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; gap: 8px; }
 .srow .num {
@@ -590,10 +625,52 @@ kbd {
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   font-size: 10px; line-height: 1.5; color: var(--ink-3);
 }
+.scale-mode .badges { display: flex; gap: 5px; }
 .scale-mode .badge { color: var(--ink-3); }
 .scale-mode.fitted .badge {
   color: var(--pin); border-color: var(--pin-line); background: var(--pin-dim);
 }
+/* A hand-set range outranks the policy badge: whatever the variable's default
+   is, the colours on screen are no longer it. */
+.scale-mode.custom .badge {
+  color: var(--accent); border-color: var(--accent-line); background: var(--accent-dim);
+}
+.scale-mode .badge.log { color: var(--ink-3); background: none; border-color: var(--line-2); }
+
+/* The scale editor ---------------------------------------------------------
+   Palette, range and mapping. Reuses the .field / .srow / .hint idiom the
+   slice controls use, so a slider here behaves like a slider there. */
+.cedit { margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--line); }
+.cedit .field { margin-top: 12px; }
+.cedit .hint { margin-top: 6px; }
+.crow { display: flex; align-items: center; gap: 9px; }
+.crow .spacer { flex: 1 1 auto; }
+.clbl {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3); flex: none;
+}
+.pals { display: flex; gap: 5px; flex: 1 1 auto; }
+.pals .pal {
+  flex: 1 1 0; height: 15px; min-width: 22px; cursor: pointer; border-radius: 3px;
+  border: 1px solid var(--line-2); padding: 0;
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+.pals .pal:hover { border-color: #47586f; }
+.pals .pal.on {
+  border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim);
+}
+.seg { display: flex; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; }
+.seg button {
+  padding: 4px 10px; cursor: pointer; background: var(--s-2); color: var(--ink-3);
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .07em;
+  text-transform: uppercase; border: 0;
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+.seg button + button { border-left: 1px solid var(--line-2); }
+.seg button:hover:not(:disabled) { background: var(--s-3); color: var(--ink-2); }
+.seg button.on { background: var(--accent-dim); color: var(--accent); }
+.seg button:disabled { cursor: not-allowed; opacity: .38; }
+.btn.creset { width: auto; padding: 4px 10px; flex: none; }
 
 /* ===========================================================================
    Cursor / pinned readout

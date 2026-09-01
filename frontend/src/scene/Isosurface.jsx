@@ -5,7 +5,7 @@ import { blockLayout } from './blockLayout.js'
 import { westStops, westCutForIndex } from './sliceStops.js'
 import { isosurfaceGeometry, cutBounds } from './marchingCubes.js'
 import { ruggedChunk, chunkSeed } from './chunkGeometry.js'
-import { rampRGB } from '../charts/sampling.js'
+import { useColorScale } from '../state/useColorScale.js'
 
 // The surface where the field equals one chosen value — the shape a 2D map
 // cannot hold.
@@ -27,8 +27,8 @@ import { rampRGB } from '../charts/sampling.js'
 //          buried part, and the two passes together cover the surface exactly
 //          once. Lit, so even the see-through pass has a shape.
 //
-// Colour is FLAT at the isovalue's own colorbar position, via the same rampRGB
-// the charts and the colorbar use. The whole surface is one value; a depth
+// Colour is FLAT at the isovalue's own colorbar position, read from the same
+// shared scale (palette + range) the block shader and the colorbar use. The whole surface is one value; a depth
 // gradient would imply variation that is not there. Lighting carries the shape.
 
 // Y placement is linear in vertExag about boxMaxY = 0, so the exaggeration
@@ -48,6 +48,7 @@ export default function Isosurface({ dataset }) {
   const depthClip = useVisualizationState((s) => s.depthClip)
   const westIndex = useVisualizationState((s) => s.westIndex)
   const setIsoStats = useVisualizationState((s) => s.setIsoStats)
+  const scale = useColorScale(dataset)
   const prev = useRef(null)
 
   const westCut = westCutForIndex(dataset, westStops(dataset), westIndex)
@@ -78,7 +79,10 @@ export default function Isosurface({ dataset }) {
       // Every mesh build, in order, so a test can prove a variable switch does
       // not spend one on an isovalue that belongs to the previous variable.
       const log = (window.__isoBuilds ||= [])
-      log.push({ variable: dataset.meta.volume.variable, isoValue, triangles: g.triangles })
+      // g is null when the isovalue crosses nothing in what is left of the
+      // block — a normal outcome, not a failure, and the log must survive it.
+      log.push({ variable: dataset.meta.volume.variable, isoValue,
+                 triangles: g ? g.triangles : 0, empty: !g })
       if (log.length > 20) log.shift()      // a ring, not a leak
     }
     return g
@@ -104,11 +108,10 @@ export default function Isosurface({ dataset }) {
     if (import.meta.env.DEV) window.__oceanIso = { dataset, built, isoValue, vertExag, iMin, jMin }
   })
 
-  const color = useMemo(() => {
-    const { valueMin, valueMax } = dataset.meta.volume
-    const [r, g, b] = rampRGB((isoValue - valueMin) / (valueMax - valueMin))
-    return new THREE.Color(`rgb(${r},${g},${b})`)
-  }, [dataset, isoValue])
+  const color = useMemo(
+    () => new THREE.Color(scale.css(isoValue)),
+    [scale, isoValue],
+  )
 
   if (!show || !built) return null
   const s = vertExag / BUILD_EXAG

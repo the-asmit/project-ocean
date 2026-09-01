@@ -128,20 +128,7 @@ export function isothermValues({ rows }, interval) {
   return out
 }
 
-// The shader's transfer() stops, so a chart colour and a voxel colour for the
-// same value agree. If transfer() changes, change this.
-const STOPS = [
-  [8, 26, 107], [26, 140, 217], [89, 209, 140], [250, 217, 77], [235, 64, 38],
-]
-export function rampRGB(t) {
-  const u = Math.min(1, Math.max(0, t)) * (STOPS.length - 1)
-  const i = Math.min(STOPS.length - 2, Math.floor(u))
-  const f = u - i
-  return STOPS[i].map((a, k) => Math.round(a + (STOPS[i + 1][k] - a) * f))
-}
-export function rampColor(t) {
-  const c = rampRGB(t)
-  return `rgb(${c[0]},${c[1]},${c[2]})`
-}
-
-export const RAMP_CSS = `linear-gradient(to top, ${STOPS.map((c) => `rgb(${c.join(',')})`).join(', ')})`
+// Colour used to live here, as a STOPS array kept in agreement with the
+// shader's transfer() by a comment. It now lives in scene/colorScale.js, which
+// the shader samples as a LUT texture — one definition, four palettes, and a
+// user-editable range. Read it through useColorScale(dataset), never directly.

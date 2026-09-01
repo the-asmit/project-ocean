@@ -12,6 +12,10 @@ re-hit Copernicus Marine.
     GET /bathymetry?region=                    binary f32 seafloor world-Y grid
     GET /bathymetry/height?region=             binary u8 seafloor mask texture
     GET /point?region=&date=&variable=&lat=&lon=&depth=   JSON point query
+    GET /argo/floats?region=&date=            real Argo floats near the tile
+    GET /argo/profile?wmo=&cycle=             one real Argo profile
+    GET /gliders/tracks?region=&date=         real glider deployments in the tile
+    GET /gliders/track?deployment=&region=    one decimated glider track
 
 Cache layout:
     cache/raw/<key>.nc              raw Copernicus downloads
@@ -30,7 +34,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from adapters import bathymetry, glorys
+from adapters import argo, bathymetry, gliders, glorys
 
 ROOT = pathlib.Path(__file__).parent
 CACHE = ROOT / "cache"
@@ -88,6 +92,28 @@ CONTEXT_REGION = {
     "label": "North Indian Ocean",
     "lon_min": 68.0, "lon_max": 98.0, "lat_min": 0.0, "lat_max": 26.0,
 }
+
+# Places worth travelling to, because the data is there and not here.
+#
+# There is no glider anywhere near the 2026-06 demo tile: the OceanGliders GDAC
+# holds exactly five deployments in the whole northern Indian Ocean, all July
+# 2016 at ~8 N, 85-89 E. Rather than fake one, the UI offers a labelled jump to
+# where the real tracks are. GLORYS covers 1993 onward, so the model tile for
+# that date is as real as the demo one.
+PRESETS = [
+    {
+        "id": "gliders-bob-2016",
+        "label": "Glider deployment · Bay of Bengal",
+        "sub": "5 real glider tracks · July 2016",
+        "region": "bbox:85.0,90.0,5.0,10.0",
+        "date": "2016-07-08",
+        "why": ("Real OceanGliders GDAC tracks. No glider has operated near the "
+                "2026-06 demo tile, so this jumps to real historical data — "
+                "both the model tile and the glider tracks are measured, at their "
+                "own date."),
+        "layer": "gliders",
+    },
+]
 
 # Selection limits. The validated tiles are 5-6 deg on a side; below ~1.5 deg a
 # 1/12 deg tile has too few cells to interpolate, and above ~10 deg the derive
@@ -281,6 +307,96 @@ def _currents_dir(region: str, date: str, days: int = CURRENT_DAYS) -> pathlib.P
 
 
 # --------------------------------------------------------------------------
+# in-situ observations (real instruments, proxied and cached)
+# --------------------------------------------------------------------------
+# Argo floats cycle about every 10 days, so a single date almost always matches
+# nothing: the demo tile has five floats within +/-10 days of its date and ZERO
+# on the date itself. Everything here is a WINDOW, and the client discloses the
+# real profile date against the model date.
+OBS_DAYS = 10
+
+
+def _obs_window(date: str, days: int = OBS_DAYS) -> tuple[str, str]:
+    d = datetime.date.fromisoformat(date)
+    return ((d - datetime.timedelta(days=days)).isoformat(),
+            (d + datetime.timedelta(days=days)).isoformat())
+
+
+def _obs_cached(key: str, build):
+    """Filesystem-cached JSON. These are third-party services; a demo must not
+    depend on them staying up, and must not hammer them on every re-render."""
+    out = DERIVED / "obs"
+    out.mkdir(parents=True, exist_ok=True)
+    f = out / f"{key}.json"
+    with _lock(key):
+        if f.exists():
+            return json.loads(f.read_text())
+        data = build()
+        f.write_text(json.dumps(data))
+    return data
+
+
+@app.get("/argo/floats")
+def argo_floats(region: str = "coastal", date: str = DEFAULT_DATE, days: int = OBS_DAYS):
+    """Real Argo floats whose profiles fall in this tile and window."""
+    d0, d1 = _obs_window(date, days)
+    key = f"argo_{_slug(region)}_{date}_{days}d"
+    try:
+        floats = _obs_cached(key, lambda: argo.list_floats(_region(region), d0, d1))
+    except Exception as e:                      # the GDAC is a third party
+        raise HTTPException(502, f"Argo GDAC unavailable: {e}") from e
+    return {
+        "floats": floats, "count": len(floats),
+        "region": _canon(region), "date": date,
+        "windowFrom": d0, "windowTo": d1, "windowDays": days,
+        "source": argo.SOURCE_NAME, "sourceUrl": argo.SOURCE_URL,
+    }
+
+
+@app.get("/argo/profile")
+def argo_profile(wmo: str = Query(...), cycle: int = Query(...)):
+    """One real Argo profile: pressure, temperature and salinity, QC-filtered."""
+    try:
+        return _obs_cached(f"argoprof_{wmo}_{cycle}", lambda: argo.get_profile(wmo, cycle))
+    except Exception as e:
+        raise HTTPException(502, f"Argo GDAC unavailable: {e}") from e
+
+
+@app.get("/gliders/tracks")
+def glider_tracks(region: str = "coastal", date: str = DEFAULT_DATE, days: int = OBS_DAYS):
+    """Real glider deployments crossing this tile in this window. An empty list
+    is a real answer, and the client says so rather than rendering nothing."""
+    d0, d1 = _obs_window(date, days)
+    key = f"gliders_{_slug(region)}_{date}_{days}d"
+    try:
+        tracks = _obs_cached(key, lambda: gliders.list_tracks(_region(region), d0, d1))
+    except Exception as e:
+        raise HTTPException(502, f"OceanGliders GDAC unavailable: {e}") from e
+    return {
+        "tracks": tracks, "count": len(tracks),
+        "region": _canon(region), "date": date,
+        "windowFrom": d0, "windowTo": d1, "windowDays": days,
+        "source": gliders.SOURCE_NAME, "sourceUrl": gliders.SOURCE_URL,
+    }
+
+
+@app.get("/gliders/track")
+def glider_track(deployment: str = Query(...), region: str = "coastal",
+                 date: str = DEFAULT_DATE):
+    """One deployment, decimated to a drawable path with every dive apex kept."""
+    try:
+        vmeta = json.loads((_volume_dir(region, date, "thetao") / "meta.json").read_text())
+        max_depth = vmeta["maxDepthM"]
+    except Exception:
+        max_depth = None
+    try:
+        return _obs_cached(f"gtrack_{deployment}",
+                           lambda: gliders.get_track(deployment, max_depth))
+    except Exception as e:
+        raise HTTPException(502, f"OceanGliders GDAC unavailable: {e}") from e
+
+
+# --------------------------------------------------------------------------
 # routes
 # --------------------------------------------------------------------------
 @app.get("/health")
@@ -301,6 +417,7 @@ def regions():
         "selection": {"minSpanDeg": MIN_SPAN_DEG, "maxSpanDeg": MAX_SPAN_DEG},
         "defaultRegion": "bengal",
         "defaultDate": DEFAULT_DATE,
+        "presets": PRESETS,
         "variables": glorys.VARIABLES,
     }
 

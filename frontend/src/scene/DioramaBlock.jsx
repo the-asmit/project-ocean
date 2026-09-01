@@ -4,6 +4,8 @@ import { useVisualizationState } from '../state/useVisualizationState.js'
 import { blockLayout } from './blockLayout.js'
 import { westStops, westCutForIndex } from './sliceStops.js'
 import { ruggedChunk, cutOutline, chunkGhostOutline, chunkSeed } from './chunkGeometry.js'
+import { paletteLUT, LUT_SIZE } from './colorScale.js'
+import { useColorScale } from '../state/useColorScale.js'
 
 // ===========================================================================
 // Bounded diorama chunk — a finite display object, not an infinite fog volume.
@@ -73,6 +75,10 @@ uniform vec3 cameraPosition;
 uniform sampler3D uField;      // RG8 — .r value, .g validity
 uniform float uLUT[LUT_N];     // box depth fraction -> field row texcoord
 uniform sampler2D uHeightMap;  // R8, 0..1 normalised seafloor height
+uniform sampler2D uRamp;       // 256x1 palette LUT, built in colorScale.js
+uniform vec2 uRange;           // display window, in BAKED-normalised units
+uniform vec2 uValue;           // (valueMin, valueMax - valueMin), for log
+uniform float uLog;            // 1 = logarithmic colour mapping
 uniform vec3 uBoxMin;          // ALWAYS the full block, even when clipped
 uniform vec3 uBoxMax;
 uniform vec2 uFloorRange;
@@ -108,18 +114,29 @@ float fbm(vec2 p) {
   return v;
 }
 
-// Cold -> warm. Identical stops to VolumeRaymarch's transfer(), the Colorbar
-// and charts/sampling.js — one value means one colour everywhere.
+// Baked-normalised value -> position on the DISPLAYED scale.
+//
+// t arrives already normalised into the volume's baked [valueMin, valueMax]
+// window and clipped there by the backend. Narrowing the window is a remap of
+// t; widening past it is impossible, which is why the JS side clamps the custom
+// range to the baked one before it ever reaches this uniform.
+float scalePos(float t) {
+  if (uLog > 0.5) {
+    float vlo = uValue.x + uRange.x * uValue.y;
+    float vhi = uValue.x + uRange.y * uValue.y;
+    float v   = uValue.x + t        * uValue.y;
+    return clamp((log(max(v, 1e-9)) - log(vlo)) / (log(vhi) - log(vlo)), 0.0, 1.0);
+  }
+  return clamp((t - uRange.x) / max(uRange.y - uRange.x, 1e-6), 0.0, 1.0);
+}
+
+// The palette itself. Sampled from the SAME 256-entry table charts/colorScale.js
+// hands the charts, at the exact texel centres it was built for — (0.5 + p*255)
+// / 256 lands position i/255 on texel i with no filter blend, so a voxel and a
+// chart stroke for one value are the same three bytes.
 vec3 transfer(float t) {
-  vec3 c0 = vec3(0.031, 0.102, 0.420);
-  vec3 c1 = vec3(0.102, 0.549, 0.851);
-  vec3 c2 = vec3(0.349, 0.820, 0.549);
-  vec3 c3 = vec3(0.980, 0.851, 0.302);
-  vec3 c4 = vec3(0.922, 0.251, 0.149);
-  if (t < 0.25) return mix(c0, c1, t / 0.25);
-  if (t < 0.50) return mix(c1, c2, (t - 0.25) / 0.25);
-  if (t < 0.75) return mix(c2, c3, (t - 0.50) / 0.25);
-  return mix(c3, c4, (t - 0.75) / 0.25);
+  float p = scalePos(t);
+  return texture(uRamp, vec2((0.5 + p * 255.0) / 256.0, 0.5)).rgb;
 }
 
 // Presentation grade only — never changes which colour a value maps to.
@@ -382,6 +399,29 @@ export default function DioramaBlock({ dataset, meshRef }) {
   const seed = useMemo(() => chunkSeed(tileKey), [tileKey])
   const v = dataset.meta.volume
 
+  // The colour scale, shared with every other consumer (see useColorScale).
+  // The palette reaches the GPU as a 256x1 byte texture rather than as stops in
+  // the shader, so adding a palette is a data change, not a shader change, and
+  // the block cannot drift from the colorbar.
+  const scale = useColorScale(dataset)
+  const ramp = useMemo(() => {
+    const tex = new THREE.DataTexture(
+      paletteLUT(scale.paletteId), LUT_SIZE, 1, THREE.RGBAFormat,
+    )
+    // NoColorSpace: this is a RawShaderMaterial, so three injects no output
+    // conversion and the fragment's own constants are already written in the
+    // same unmanaged space. Anything else would recolour the whole block.
+    tex.colorSpace = THREE.NoColorSpace
+    tex.minFilter = THREE.LinearFilter
+    tex.magFilter = THREE.LinearFilter
+    tex.wrapS = THREE.ClampToEdgeWrapping
+    tex.wrapT = THREE.ClampToEdgeWrapping
+    tex.generateMipmaps = false
+    tex.needsUpdate = true
+    return tex
+  }, [scale.paletteId])
+  useEffect(() => () => ramp.dispose(), [ramp])
+
   // Contour interval in the variable's own units, from the manifest: 2 °C for
   // temperature on every tile, and a per-tile round number for salinity, whose
   // range is the tile's own.
@@ -398,6 +438,10 @@ export default function DioramaBlock({ dataset, meshRef }) {
       uField: { value: dataset.field },
       uLUT: { value: dataset.lut },
       uHeightMap: { value: dataset.height },
+      uRamp: { value: ramp },
+      uRange: { value: new THREE.Vector2(0, 1) },
+      uValue: { value: new THREE.Vector2(v.valueMin, v.valueMax - v.valueMin) },
+      uLog: { value: 0 },
       uBoxMin: { value: new THREE.Vector3(-halfX, L.boxMinY, -halfZ) },
       uBoxMax: { value: new THREE.Vector3(halfX, L.boxMaxY, halfZ) },
       uFloorRange: { value: new THREE.Vector2(L.boxMinY, L.boxMaxY) },
@@ -414,6 +458,16 @@ export default function DioramaBlock({ dataset, meshRef }) {
     }),
     [dataset, halfX, halfZ, spanX, contourStep, surfMid],   // eslint-disable-line
   )
+
+  // Colour-scale uniforms, kept out of the layout effect below because they
+  // change on a different cadence (a slider drag) from the geometry.
+  useEffect(() => {
+    uniforms.uRamp.value = ramp
+    uniforms.uRange.value.set(scale.uniformRange[0], scale.uniformRange[1])
+    uniforms.uValue.value.set(v.valueMin, v.valueMax - v.valueMin)
+    uniforms.uLog.value = scale.log ? 1 : 0
+    if (import.meta.env.DEV) window.__oceanRamp = { scale, lut: paletteLUT(scale.paletteId) }
+  }, [uniforms, ramp, scale, v.valueMin, v.valueMax])
 
   // Vertical exaggeration scales the box and the floor range TOGETHER, exactly
   // as the raymarch did — the water must never de-register from the seafloor.

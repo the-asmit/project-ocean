@@ -7,7 +7,8 @@ import Panel, { IconButton } from '../ui/Panel.jsx'
 import { IconCollapse } from '../ui/icons.jsx'
 import { useComparison } from '../observations/useObservations.js'
 import { useVisualizationState } from '../state/useVisualizationState.js'
-import { sampleProfile, makeSeafloorAt, rampColor } from './sampling.js'
+import { sampleProfile, makeSeafloorAt } from './sampling.js'
+import { useColorScale } from '../state/useColorScale.js'
 import { useProbe } from '../interaction/useProbe.js'
 import { useCurrentsState, useCurrentsData } from '../currents/useCurrentsState.js'
 import { sampleCurrentProfile, compass } from './currentsSampling.js'
@@ -17,12 +18,16 @@ const GRID = '#1e2733'
 const AXIS = '#5a6a80'
 const TICK = { fill: '#77879e', fontSize: 9.5, fontFamily: 'IBM Plex Mono, monospace' }
 
-// Knots sit on real GLORYS levels, coloured by the same ramp as the volume —
-// the dot spacing is itself information: the model resolves the mixed layer
+// Knots sit on real GLORYS levels, coloured by the SHARED scale — the same
+// palette and range the block, the isosurface and the colorbar use, so a knot
+// at 20 degC is the colour a 20 degC voxel is. (They used to be normalised
+// against this chart's own padded axis instead, which spread them across the
+// whole ramp and made a knot's colour mean nothing outside this panel.)
+// The dot spacing is itself information: the model resolves the mixed layer
 // finely and the deep column coarsely.
-function Knot({ cx, cy, payload, lo, hi }) {
+function Knot({ cx, cy, payload, colorOf }) {
   if (cx == null || cy == null) return null
-  return <circle cx={cx} cy={cy} r={2} fill={rampColor((payload.value - lo) / (hi - lo))} stroke="#0e131b" strokeWidth={0.6} />
+  return <circle cx={cx} cy={cy} r={2} fill={colorOf(payload.value)} stroke="#0e131b" strokeWidth={0.6} />
 }
 
 // Float curve is ink white, matching the selected marker in the 3D scene.
@@ -53,8 +58,11 @@ function ComparisonChart({ dataset, cmp }) {
   const deepest = rows.length ? rows[rows.length - 1].depth : 0
   const axisMax = Math.max(60, Math.ceil((deepest * 1.06) / 25) * 25)
   const vals = rows.flatMap((r) => [r.obs, r.model]).filter((x) => x != null)
-  const lo = Math.floor(Math.min(...vals) - 1)
-  const hi = Math.ceil(Math.max(...vals) + 1)
+  // padded and snapped in units of the variable's own contour step — 1 °C for
+  // temperature, exactly as before, and 0.25 PSU for salinity
+  const qc = v.contourStep / 2
+  const lo = Number((Math.floor((Math.min(...vals) - qc) / qc) * qc).toFixed(6))
+  const hi = Number((Math.ceil((Math.max(...vals) + qc) / qc) * qc).toFixed(6))
 
   return (
     <Panel
@@ -78,9 +86,26 @@ function ComparisonChart({ dataset, cmp }) {
           {worst && (
             <span>max {worst.diff > 0 ? '+' : ''}{worst.diff.toFixed(2)} at {worst.depthM.toFixed(0)} m</span>
           )}
-          {/* P3: a fabricated profile drawn beside a model curve is the most
-              misleading thing this app can render, so it says so, here, always */}
-          {cmp.synthetic && <span className="synth">SYNTHETIC float — not a measurement</span>}
+          {/* P3: the profile beside the model curve is a real measurement now,
+              so the claim to make is PROVENANCE — which float, whose DAC, and
+              whether it has been through delayed-mode QC or only the automatic
+              real-time checks. A fabricated one would still say so instead. */}
+          {cmp.synthetic ? (
+            <span className="synth">SYNTHETIC float — not a measurement</span>
+          ) : (
+            <span>
+              {float.dacLabel} · cycle {float.cycle} ·{' '}
+              {float.dataMode === 'D' ? 'delayed-mode (adjusted)' : 'real-time (automatic QC)'}
+            </span>
+          )}
+          {/* The float did not profile on the model's date — Argo cycles about
+              every 10 days. Two dates on one chart are never left to be
+              assumed equal, the same rule the currents timeline follows. */}
+          {!cmp.synthetic && float.date !== dataset.meta.date && (
+            <span className="synth">
+              float profiled {float.date} — NOT the {dataset.meta.date} model date
+            </span>
+          )}
         </div>
       }
     >
@@ -90,7 +115,7 @@ function ComparisonChart({ dataset, cmp }) {
           <XAxis
             type="number" domain={[lo, hi]}
             tick={TICK} tickLine={{ stroke: AXIS }} axisLine={{ stroke: AXIS }}
-            tickFormatter={(t) => t.toFixed(0)} height={22}
+            tickFormatter={(t) => Number(t.toFixed(2)).toString()} height={22}
             label={{ value: `${v.variableLabel.toLowerCase()} (${v.units})`, position: 'insideBottom', offset: -2, fill: '#5a6a80', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
           />
           <YAxis
@@ -220,6 +245,7 @@ function ProfileTip({ active, payload, units }) {
 }
 
 export default function ProfileChart({ dataset }) {
+  const scale = useColorScale(dataset)
   const selected = useVisualizationState((s) => s.selected)
   const hover = useVisualizationState((s) => s.hover)
   const probe = useProbe(dataset)
@@ -358,7 +384,7 @@ export default function ProfileChart({ dataset }) {
             <Line
               type="monotone" dataKey="value" stroke="#4fc3f7" strokeWidth={1.6}
               isAnimationActive={false}
-              dot={<Knot lo={lo} hi={hi} />}
+              dot={<Knot colorOf={scale.css} />}
               activeDot={{ r: 3.4, fill: '#4fc3f7', stroke: '#0e131b', strokeWidth: 1 }}
             />
           </LineChart>
