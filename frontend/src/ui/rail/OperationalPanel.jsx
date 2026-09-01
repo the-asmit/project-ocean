@@ -4,6 +4,7 @@ import { useVisualizationState } from '../../state/useVisualizationState.js'
 import { useHeatPotential } from '../../state/useHeatPotential.js'
 import { heatPotentialAvailable, THRESHOLD, TCHP_MAX } from '../../scene/heatPotential.js'
 import { paletteRGB } from '../../scene/colorScale.js'
+import { usePresets } from '../usePresets.js'
 
 // Derived, decision-relevant quantities — the operational layer from
 // OPERATIONAL_LAYER_SPEC.md.
@@ -46,6 +47,10 @@ function HeatControl({ dataset, compact }) {
   const paletteId = useVisualizationState((s) => s.palette)
   const clipIndex = useVisualizationState((s) => s.clipIndex)
   const setVariable = useVisualizationState((s) => s.setVariable)
+  const applyPreset = useVisualizationState((s) => s.applyPreset)
+  const region = useVisualizationState((s) => s.region)
+  const date = useVisualizationState((s) => s.date)
+  const scenarios = usePresets().filter((x) => x.kind === 'scenario')
   const heat = useHeatPotential(dataset)
 
   // One variable is loaded at a time and this is arithmetic on the temperature
@@ -92,6 +97,30 @@ function HeatControl({ dataset, compact }) {
           </button>
         </p>
       )}
+
+      {/* A tile and a date where this layer has something to say. It is not
+          gated on an empty state the way the glider preset is: nothing is
+          missing here, the default tile simply sits in a season where almost
+          every column clears the threshold and the contour has nothing to
+          separate. Offered whether the layer is on or off, because it is how
+          you find out the layer is worth turning on. */}
+      {scenarios.map((prst) => (
+        region === prst.region && date === prst.date ? (
+          <p className="hint" key={prst.id} style={{ margin: '9px 0 0' }}>
+            <b>Cyclone scenario loaded</b> — {prst.sub}. Depth axis at{' '}
+            {prst.vertExag}× so the warm-layer relief reads; the SECTION panel
+            returns it to 8×.
+          </p>
+        ) : (
+          <button key={prst.id} type="button" className="preset"
+            onClick={() => applyPreset(prst)}>
+            <span className="preset-go">Load scenario</span>
+            <span className="preset-label">{prst.label}</span>
+            <span className="preset-sub">{prst.sub}</span>
+            <span className="preset-why">{prst.why}</span>
+          </button>
+        )
+      ))}
 
       {showHeat && available && (
         <>

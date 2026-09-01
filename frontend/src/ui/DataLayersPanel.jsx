@@ -211,7 +211,8 @@ export function ObservationsBody({ dataset }) {
 
       {/* Where the data IS, when it is not here. Labelled as a jump to real
           historical data, never dressed up as the current tile. */}
-      {showGliders && gliders.status === 'empty' && presets.map((p) => (
+      {showGliders && gliders.status === 'empty'
+        && presets.filter((p) => p.kind !== 'scenario').map((p) => (
         <button key={p.id} type="button" className="preset" onClick={() => applyPreset(p)}>
           <span className="preset-go">Go to real data</span>
           <span className="preset-label">{p.label}</span>

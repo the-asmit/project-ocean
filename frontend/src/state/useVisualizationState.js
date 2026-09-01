@@ -49,6 +49,18 @@ export const useVisualizationState = create((set) => ({
       selectedFloatId: null, isoStats: null,
       selectedGliderId: null, gliderStats: null, customRange: null,
       ...(preset.layer === 'gliders' ? { showGliders: true } : {}),
+      // A scenario is a whole destination: where, when, WHICH FIELD, and which
+      // layer answers the question it was built to answer. Setting the variable
+      // here rather than leaving it is deliberate — TCHP is an integral over
+      // temperature, so a cyclone scenario that landed on the salinity volume
+      // would arrive with its own headline layer switched off.
+      ...(preset.layer === 'heat'
+        ? { variable: 'thetao', showHeat: true, heatD26: true, heatField: true }
+        : {}),
+      // Vertical exaggeration is a user-facing render control, disclosed in the
+      // footer, and a preset may set it the way it sets the camera-free defaults
+      // above. It changes how the block is drawn, never what is in it.
+      ...(preset.vertExag ? { vertExag: preset.vertExag } : {}),
     }),
 
   // True while a tile is being fetched/derived. The previously loaded dataset

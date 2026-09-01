@@ -111,7 +111,43 @@ PRESETS = [
                 "2026-06 demo tile, so this jumps to real historical data — "
                 "both the model tile and the glider tracks are measured, at their "
                 "own date."),
+        "kind": "observation",
         "layer": "gliders",
+    },
+    # A tile and a date where the cyclone layer has something to say.
+    #
+    # THE THRESHOLD ONLY DRAWS A LINE WHERE THERE IS A LINE TO DRAW. The
+    # pre-monsoon Bay of Bengal is almost uniformly above 40 kJ/cm2: measured on
+    # five April-May tiles, the open-ocean ones run 96-100% over it, so the
+    # contour has nothing to separate and never appears. It becomes a line only
+    # where the shelf cuts the depth integral short, which means the tile has to
+    # include coastline. `bengal` does, and on this date GLORYS puts 8.9% of its
+    # water columns under the threshold with D26 spanning 6-122 m.
+    #
+    # The date is an ocean-state and calendar claim ONLY: 1 May 2019 is two days
+    # before Cyclone Fani made landfall at Puri. It deliberately does NOT say
+    # where the storm was on this day — that needs checking against the IMD
+    # track, not asserting from a preset.
+    #
+    # vertExag is a user-facing render control being set to a sensible value for
+    # this scenario, not a change to any data: at the default 8x the depth curve
+    # compresses D26's 6-122 m range into about a fifth of the block's height
+    # and the warp reads as gentle undulation.
+    {
+        "id": "cyclone-bob-2019",
+        "label": "Cyclone scenario · Bay of Bengal",
+        "sub": "D26 + TCHP, pre-monsoon · 1 May 2019",
+        "region": "bengal",
+        "date": "2019-05-01",
+        "why": ("The Bay two days before Cyclone Fani made landfall at Puri — "
+                "ocean state and calendar only; this does not claim where the "
+                "storm was on the day, which needs the IMD track. GLORYS gives "
+                "this tile a warm layer 6-122 m deep and 8.9% of its water "
+                "columns below 40 kJ/cm2, so the threshold contour has a shelf "
+                "edge to run along instead of a uniformly favourable field."),
+        "kind": "scenario",
+        "layer": "heat",
+        "vertExag": 14,
     },
 ]
 

@@ -42,6 +42,7 @@ function SourceNote({ dataset }) {
   const showArgo = useVisualizationState((s) => s.showArgo)
   const showIso = useVisualizationState((s) => s.showIso)
   const showHeat = useVisualizationState((s) => s.showHeat)
+  const heatField = useVisualizationState((s) => s.heatField)
   const isoValue = useVisualizationState((s) => s.isoValue)
   const showCurrents = useCurrentsState((s) => s.showCurrents)
   const frame = useCurrentsState((s) => s.frame)
@@ -60,6 +61,12 @@ function SourceNote({ dataset }) {
   // disclose something that is.
   const sliced = clipIndex > 0
   const westSliced = westIndex > 0
+  // A THIRD thing that can be on the top face. The stylized-surface disclosure
+  // stops being true the moment the knife comes down; it also stops being true
+  // when the TCHP field is drawn over it, because then what you are looking at
+  // is a derived quantity, not a decorative sea surface. Same rule, third case —
+  // and it REPLACES the clause rather than adding one, so the footer holds.
+  const heatLid = showHeat && heatField && !sliced
   const cutNames = [
     sliced && 'top face',
     westSliced && 'west face',
@@ -82,13 +89,15 @@ function SourceNote({ dataset }) {
         {v.source} / Copernicus
       </span>
       <span className="dot">·</span>
-      <span className={showDetail && !sliced ? 'synth' : undefined}>
+      <span className={showDetail && !sliced && !heatLid ? 'synth' : undefined}>
         {sliced || westSliced
           ? `Sliced — ${cutNames} ${sliced && westSliced ? 'are' : 'is'} REAL section`
             + (sliced ? ', stylized surface removed' : '')
-          : showDetail
-            ? 'Top face STYLIZED, not imagery; cut faces are real'
-            : 'Stylized top face OFF — every rendered face is data'}
+          : heatLid
+            ? 'Top face is the DERIVED TCHP field, not the stylized surface'
+            : showDetail
+              ? 'Top face STYLIZED, not imagery; cut faces are real'
+              : 'Stylized top face OFF — every rendered face is data'}
       </span>
       <span className="dot">·</span>
       <span>1/12° ≈ 9 km</span>
