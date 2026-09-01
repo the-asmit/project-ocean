@@ -64,7 +64,10 @@ function coastline(land, W, D) {
   return segs
 }
 
-export default function Minimap({ dataset, cameraRef }) {
+// `compact` renders the same map without the Panel chrome, as a persistent
+// thumbnail in the 3D view. ONE instance is mounted either way — the drawing
+// loop is a single rAF, and a second copy would be a second one.
+export default function Minimap({ dataset, cameraRef, compact = false }) {
   const canvasRef = useRef()
   const wrapRef = useRef()
   const baseRef = useRef(null)
@@ -321,13 +324,8 @@ export default function Minimap({ dataset, cameraRef }) {
   const deg = (v, pos, neg) => `${Math.abs(v).toFixed(1)}°${v >= 0 ? pos : neg}`
   const lim = base?.limits
 
-  return (
-    <Panel
-      className="map-panel"
-      title="Map view"
-      sub="North Indian Ocean · drag to select"
-      bodyClass="map-body"
-    >
+  const body = (
+    <>
       <div className="mm-wrap" ref={wrapRef} style={{ aspectRatio: String(aspect) }}>
         {base ? (
           <canvas ref={canvasRef} className="mm-canvas"
@@ -351,13 +349,41 @@ export default function Minimap({ dataset, cameraRef }) {
         )}
       </div>
 
-      <div className="mm-legend">
-        <span><i style={{ background: '#4fc3f7' }} /> loaded tile</span>
-        <span><i style={{ background: '#ffc46b' }} /> pinned</span>
-        <span style={{ marginLeft: 'auto' }}>
-          {deg(m.latMin, 'N', 'S')}–{deg(m.latMax, 'N', 'S')} {deg(m.lonMin, 'E', 'W')}–{deg(m.lonMax, 'E', 'W')}
-        </span>
+      {!compact && (
+        <div className="mm-legend">
+          <span><i style={{ background: '#4fc3f7' }} /> loaded tile</span>
+          <span><i style={{ background: '#ffc46b' }} /> pinned</span>
+          <span style={{ marginLeft: 'auto' }}>
+            {deg(m.latMin, 'N', 'S')}–{deg(m.latMax, 'N', 'S')} {deg(m.lonMin, 'E', 'W')}–{deg(m.lonMax, 'E', 'W')}
+          </span>
+        </div>
+      )}
+    </>
+  )
+
+  if (compact) {
+    return (
+      <div className="mm-thumb" aria-label="Map view — drag to load a region">
+        <div className="mm-thumb-head">
+          <span className="lbl">Map view</span>
+          <span className="mm-thumb-where">
+            {deg(m.latMin, 'N', 'S')}–{deg(m.latMax, 'N', 'S')}&ensp;
+            {deg(m.lonMin, 'E', 'W')}–{deg(m.lonMax, 'E', 'W')}
+          </span>
+        </div>
+        {body}
       </div>
+    )
+  }
+
+  return (
+    <Panel
+      className="map-panel"
+      title="Map view"
+      sub="North Indian Ocean · drag to select"
+      bodyClass="map-body"
+    >
+      {body}
     </Panel>
   )
 }

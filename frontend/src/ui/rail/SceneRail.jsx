@@ -1,14 +1,13 @@
 import Panel, { IconButton } from '../Panel.jsx'
 import SectionControls from '../SectionControls.jsx'
 import Colorbar from '../Colorbar.jsx'
-import Minimap from '../Minimap.jsx'
 import OperationalPanel from './OperationalPanel.jsx'
 import {
   VariablesBody, BathymetryBody, ObservationsBody, CirculationBody, ToolsBody,
 } from '../DataLayersPanel.jsx'
 import { useVisualizationState } from '../../state/useVisualizationState.js'
 import {
-  IconLayers, IconSlice, IconCyclone, IconRamp, IconSelect, IconRuler, IconCollapse,
+  IconLayers, IconSlice, IconCyclone, IconRamp, IconRuler, IconCollapse,
 } from '../icons.jsx'
 
 // The control rail, inside the 3D canvas.
@@ -30,6 +29,10 @@ import {
 // NO GLASS. styles.css opens by stating it: "No glass: translucency is overlay
 // language, and nothing here floats." These panels are opaque surfaces with the
 // same hairline the rails had, because they are the same controls.
+//
+// THE MAP IS NOT IN HERE. It is a permanent thumbnail in the corner of the view
+// instead: it answers "where am I", which is a question you have continuously
+// rather than one you go and ask, and drag-select works on it directly.
 
 const GROUPS = [
   {
@@ -70,14 +73,6 @@ const GROUPS = [
     title: 'Palette, range and mapping for the colour scale',
     bare: true,          // Colorbar brings its own <Panel>
     render: ({ dataset }) => <Colorbar dataset={dataset} />,
-  },
-  {
-    id: 'region',
-    label: 'Region',
-    icon: IconSelect,
-    title: 'Where this tile is — drag a box to load another',
-    bare: true,          // Minimap brings its own <Panel>
-    render: ({ dataset }) => <Minimap dataset={dataset} />,
   },
   {
     id: 'tools',

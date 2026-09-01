@@ -256,7 +256,7 @@ export function ToolsBody() {
   return (
     <>
       <div className="layers" style={{ marginBottom: 10 }}>
-        <Layer on disabled badge="MAP" title="Drag the map in the REGION panel to load a new GLORYS tile">
+        <Layer on disabled badge="MAP" title="Always on — drag a box on the map in the top right of the 3D view to load that tile">
           Select region
         </Layer>
         {TOOLS.map((t) => (
@@ -264,8 +264,9 @@ export function ToolsBody() {
         ))}
       </div>
       <p className="hint" style={{ margin: 0 }}>
-        Hover the 3D view to read a value, click to pin one. The profile and
-        the transect both follow the pinned point.
+        Drag a box on the map in the top right of the view to load a different
+        tile, 1.5–10° per side. Hover the 3D view to read a value, click to pin
+        one — the profile and the transect both follow the pinned point.
       </p>
     </>
   )

@@ -3,6 +3,8 @@ import AppBar from './ui/AppBar.jsx'
 import ScenePanel from './ui/ScenePanel.jsx'
 import TransectChart from './charts/TransectChart.jsx'
 import ProfileChart from './charts/ProfileChart.jsx'
+import ComparisonPanel from './charts/ComparisonPanel.jsx'
+import PinnedStats from './ui/PinnedStats.jsx'
 import { IconAlert } from './ui/icons.jsx'
 import { loadDataset } from './scene/dataset.js'
 import { isoRange } from './scene/isoRange.js'
@@ -247,9 +249,15 @@ export default function App() {
           the charts, and the provenance strip. */}
       <div className="center">
         <ScenePanel dataset={dataset} cameraRef={cameraRef} />
+        {/* Read-only outside the canvas: the numbers under the pin, then the
+            three charts. Model-vs-float is a permanent panel rather than
+            something that displaces the profile, so the model column and the
+            comparison can be read together. */}
         <div className="charts">
+          <PinnedStats dataset={dataset} />
           <ProfileChart dataset={dataset} />
           <TransectChart dataset={dataset} />
+          <ComparisonPanel dataset={dataset} />
         </div>
       </div>
 

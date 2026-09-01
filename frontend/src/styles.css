@@ -1115,7 +1115,10 @@ kbd {
 .center {
   grid-column: 1 / -1;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1.7fr) minmax(0, 1fr);
+  /* The original dashboard's row weight, restored. The canvas being
+     full-width is the change this pass makes; making it taller as well took
+     the whole viewport, which was not the ask. */
+  grid-template-rows: minmax(0, 1.42fr) minmax(0, 1fr);
 }
 .scene-panel { grid-column: 1; grid-row: 1; }
 .charts {
@@ -1143,4 +1146,118 @@ kbd {
   .rail-panel { width: 268px; }
   .scene-host.rail-open { --rail-w: 326px; }
   .pinned-controls { width: 200px; }
+}
+
+/* --- the right-hand context column -------------------------------------- */
+/* Map, then legend, then the pinned readout below: where you are, what the
+   colours mean, what is under the pin. Stacked in one flow so the legend
+   cannot collide with a map whose height follows the tile's aspect ratio. */
+.scene-context {
+  position: absolute; right: 10px; top: 9px; z-index: 7;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  pointer-events: none;
+}
+.scene-context > * { pointer-events: auto; }
+.scene-context .scene-legend { position: static; pointer-events: none; }
+
+/* --- the map, permanent in the corner of the view ----------------------- */
+/* Not behind a rail toggle: "where am I" is continuous context rather than a
+   question you go and ask, and the drag that loads a new tile happens here. */
+.mm-thumb {
+  position: static;
+  width: 214px; padding: 7px 8px 8px;
+  display: flex; flex-direction: column; gap: 7px;
+  background: var(--s-1); border: 1px solid var(--line-2);
+  border-radius: var(--r); box-shadow: var(--shadow);
+}
+.mm-thumb-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
+.mm-thumb-head .lbl { white-space: nowrap; flex: none; }
+.mm-thumb-where {
+  font-family: var(--mono); font-size: 8px; color: var(--ink-4);
+  letter-spacing: .01em; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.mm-thumb .mm-pick { line-height: 1.45; }
+.mm-thumb .mm-n { top: 5px; right: 6px; }
+
+/* ===========================================================================
+   The charts row — read-only, outside the canvas
+   ---------------------------------------------------------------------------
+   Stat cards, then the model column, the section, and the model-vs-float
+   comparison. Four columns rather than three because the comparison is the
+   PS's headline capability and displacing the profile to show it meant the two
+   could never be read together.
+   =========================================================================== */
+
+.charts {
+  grid-template-columns:
+    248px minmax(0, 1fr) minmax(0, 1.12fr) minmax(0, 1fr);
+}
+.charts > .chart-profile { grid-column: 2; }
+.charts > .chart-transect { grid-column: 3; }
+.charts > .chart-compare { grid-column: 4; grid-row: auto; }
+
+/* --- stat cards --------------------------------------------------------- */
+.stats {
+  grid-column: 1; grid-row: auto;
+  display: flex; flex-direction: column;
+  background: var(--s-1); overflow: hidden;
+}
+.stats-head {
+  display: flex; align-items: baseline; gap: 8px; flex: none;
+  height: 27px; padding: 0 11px;
+  background: var(--s-2); border-bottom: 1px solid var(--line);
+}
+.stats-head .lbl { white-space: nowrap; flex: none; }
+.stats-where {
+  font-family: var(--mono); font-size: 9px; color: var(--ink-3);
+  letter-spacing: .03em; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.stat-grid {
+  flex: 1 1 auto; min-height: 0; overflow: auto;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 1px; background: var(--line);
+  border-top: 1px solid var(--line);
+}
+.stat {
+  background: var(--s-1); padding: 7px 9px 8px;
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 0;
+}
+.stat-head { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.stat-label {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stat-head .badge { font-size: 7px; padding: 0 3px; }
+.stat-value {
+  font-family: var(--mono); font-size: 15px; line-height: 1.15;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+  display: flex; align-items: baseline; gap: 4px;
+}
+.stat-unit { font-size: 9px; color: var(--ink-3); }
+.stat-sub {
+  font-family: var(--mono); font-size: 8.5px; line-height: 1.4;
+  color: var(--ink-4); letter-spacing: .02em;
+}
+/* Not computed yet, and saying so is the point — a dash that looked like a
+   reading would be worse than no card at all. */
+.stat.soon .stat-value { color: var(--ink-4); }
+.stat.warn .stat-value { color: var(--bad); font-size: 12px; }
+
+/* --- the comparison panel's empty state --------------------------------- */
+/* It is a permanent panel now, so "no float selected" is a state it renders
+   rather than a reason to disappear. */
+.chart-compare .empty { padding: 18px 16px; gap: 7px; }
+.chart-compare .empty b { font-size: 11px; }
+
+@media (max-width: 1440px) {
+  .charts { grid-template-columns: 216px minmax(0, 1fr) minmax(0, 1.12fr) minmax(0, 1fr); }
+  .stat-value { font-size: 13.5px; }
 }
