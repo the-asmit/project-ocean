@@ -1,11 +1,6 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
 import AppBar from './ui/AppBar.jsx'
 import ScenePanel from './ui/ScenePanel.jsx'
-import Minimap from './ui/Minimap.jsx'
-import DataLayersPanel from './ui/DataLayersPanel.jsx'
-import RenderControls from './ui/RenderControls.jsx'
-import Colorbar from './ui/Colorbar.jsx'
-import InfoPanel from './ui/InfoPanel.jsx'
 import TransectChart from './charts/TransectChart.jsx'
 import ProfileChart from './charts/ProfileChart.jsx'
 import { IconAlert } from './ui/icons.jsx'
@@ -247,21 +242,15 @@ export default function App() {
     <div className="app">
       <AppBar dataset={dataset} route={route} />
 
-      <div className="rail left">
-        <DataLayersPanel dataset={dataset} />
-      </div>
-
+      {/* No rails. Every control moved into the canvas (see SceneRail), so the
+          scene gets the full width and what is left outside it is read-only:
+          the charts, and the provenance strip. */}
       <div className="center">
-        <Minimap dataset={dataset} cameraRef={cameraRef} />
         <ScenePanel dataset={dataset} cameraRef={cameraRef} />
-        <ProfileChart dataset={dataset} />
-        <TransectChart dataset={dataset} />
-      </div>
-
-      <div className="rail right">
-        <RenderControls dataset={dataset} />
-        <Colorbar dataset={dataset} />
-        <InfoPanel dataset={dataset} />
+        <div className="charts">
+          <ProfileChart dataset={dataset} />
+          <TransectChart dataset={dataset} />
+        </div>
       </div>
 
       <footer className="appfoot">

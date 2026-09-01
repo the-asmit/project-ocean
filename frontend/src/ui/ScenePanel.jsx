@@ -5,6 +5,8 @@ import HUDLabel from '../interaction/HUDLabel.jsx'
 import DepthRuler from './DepthRuler.jsx'
 import SectionControls from './SectionControls.jsx'
 import SectionBadge from './SectionBadge.jsx'
+import SceneRail from './rail/SceneRail.jsx'
+import PinnedControls from '../interaction/PinnedControls.jsx'
 import TimelineControls from './TimelineControls.jsx'
 import { useCurrentsState, useCurrentsData } from '../currents/useCurrentsState.js'
 import { IconCheck } from './icons.jsx'
@@ -24,6 +26,7 @@ export default function ScenePanel({ dataset, cameraRef }) {
   const setShowCurrents = useCurrentsState((s) => s.setShowCurrents)
   const setPanelLayer = useVisualizationState((s) => s.setPanelLayer)
   const levelIndex = useCurrentsState((s) => s.levelIndex)
+  const railPanel = useVisualizationState((s) => s.railPanel)
   const currents = useCurrentsData(dataset)
   const m = dataset.meta
   const isBox = String(m.region).startsWith('bbox:')
@@ -59,11 +62,17 @@ export default function ScenePanel({ dataset, cameraRef }) {
         </>
       }
     >
-      <div className="scene-host" ref={hostRef}>
+      {/* The rail's open panel is an overlay, so the canvas legends and hints
+          move out from under it rather than being covered by it. */}
+      <div className={`scene-host${railPanel ? ' rail-open' : ''}`} ref={hostRef}>
         <OceanScene dataset={dataset} cameraRef={cameraRef} />
         <HUDLabel cameraRef={cameraRef} hostRef={hostRef} />
         <DepthRuler cameraRef={cameraRef} hostRef={hostRef} dataset={dataset} />
         <SectionBadge dataset={dataset} />
+
+        {/* Every interactive control lives in here now. */}
+        <SceneRail dataset={dataset} cameraRef={cameraRef} />
+        <PinnedControls dataset={dataset} />
 
         {/* Expanded covers the right rail, so the section controls come with
             it. Same component the rail renders — one definition of the slice

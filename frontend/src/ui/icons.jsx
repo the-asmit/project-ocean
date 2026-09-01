@@ -76,6 +76,25 @@ export const IconSlice = (p) => (
   <Svg {...p}><path d="M1.8 5.4 8 2.2l6.2 3.2L8 8.6z" /><path d="M1.8 10.2 8 13.4l6.2-3.2" opacity=".55" /></Svg>
 )
 
+// Operational layer — a cyclone spiral. The group is named for the hazard
+// quantities it will hold (TCHP, D26), so the mark is the hazard, not a gauge.
+export const IconCyclone = (p) => (
+  <Svg {...p}>
+    <path d="M8 8c0-1.75 1.5-3.05 3.4-3.05 1.95 0 3.1 1.35 3.1 2.9 0 2.6-2.6 4.65-6.5 4.65" />
+    <path d="M8 8c0 1.75-1.5 3.05-3.4 3.05-1.95 0-3.1-1.35-3.1-2.9C1.5 5.55 4.1 3.5 8 3.5" />
+    <circle cx="8" cy="8" r=".95" fill="currentColor" stroke="none" />
+  </Svg>
+)
+
+// Scale — the colour ramp as a stepped bar beside its tick labels.
+export const IconRamp = (p) => (
+  <Svg {...p}>
+    <rect x="2.6" y="1.9" width="4.8" height="12.2" rx="1" />
+    <path d="M2.6 6h4.8M2.6 10h4.8" />
+    <path d="M9.8 3.3h3.6M9.8 8h3.6M9.8 12.7h3.6" opacity=".5" />
+  </Svg>
+)
+
 export const IconHelp = (p) => (
   <Svg {...p}><circle cx="8" cy="8" r="6.2" /><path d="M6.3 6.2a1.75 1.75 0 1 1 2.4 1.6c-.5.2-.7.6-.7 1.1v.4" /><circle cx="8" cy="11.5" r=".75" fill="currentColor" stroke="none" /></Svg>
 )

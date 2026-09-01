@@ -76,6 +76,16 @@ export const useVisualizationState = create((set) => ({
   // Shared because the expanded 3D view covers the right rail and has to mount
   // its own copy of the section controls; both need to know which is on screen.
   sceneExpanded: false,
+
+  // --- the in-canvas control rail ---------------------------------------
+  // ONE open-panel mechanism for the whole app. Every control that used to live
+  // in a rail is now behind one of these ids, and exactly one panel is open at
+  // a time — clicking the active icon closes it. null = collapsed, which is the
+  // load state, so the canvas opens full-bleed.
+  railPanel: null,          // null | 'field' | 'section' | 'operational'
+                            //      | 'scale' | 'region' | 'tools'
+  toggleRailPanel: (id) => set((s) => ({ railPanel: s.railPanel === id ? null : id })),
+  closeRailPanel: () => set({ railPanel: null }),
   // Which field the Profile/Transect panels describe.
   //
   // Location and subject are separate questions: hover/pin choose WHERE, this

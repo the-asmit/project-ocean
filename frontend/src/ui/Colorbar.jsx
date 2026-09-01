@@ -137,6 +137,29 @@ export default function Colorbar({ dataset }) {
           the volume was clipped to it before download, so the scale narrows but cannot widen.
         </div>
 
+        {/* Anomaly is seated, not built: the reference-mean computation lands
+            with the rest of the operational layer. Disabled with a stated
+            reason, the same way LOG disables itself above — a control that
+            cannot act must say why rather than doing nothing when clicked. */}
+        <div className="crow">
+          <span className="clbl">Values</span>
+          <div className="seg">
+            <button type="button" className="on" aria-pressed>Normal</button>
+            <button
+              type="button" disabled aria-pressed={false}
+              title="Value minus the tile's own mean at that depth, on a diverging ramp. Not yet computed."
+            >
+              Anomaly
+            </button>
+          </div>
+          <span className="spacer" />
+          <span className="badge">SOON</span>
+        </div>
+        <div className="hint">
+          Anomaly shows what is unusual rather than what is warm. Not computed yet —
+          the reference mean lands with the operational layer.
+        </div>
+
         <div className="crow">
           <span className="clbl">Mapping</span>
           <div className="seg">

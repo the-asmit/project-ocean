@@ -570,6 +570,11 @@ kbd {
    =========================================================================== */
 .chart-transect { grid-column: 2; grid-row: 2; }
 .chart-profile { grid-column: 1; grid-row: 2; }
+/* ...but not inside the charts row, which is its own single-row grid. Left in
+   place above only because the media queries below still reference them. */
+.charts > .chart-profile, .charts > .chart-transect { grid-row: auto; }
+.charts > .chart-profile { grid-column: 1; }
+.charts > .chart-transect { grid-column: 2; }
 .chart-body { padding: 10px 12px 4px 4px; height: 100%; }
 .chart-opts {
   display: flex; align-items: center; gap: 12px; flex: none;
@@ -1005,4 +1010,137 @@ kbd {
   .docs-toc { display: none; }
   .docs-body { padding: 26px 20px 100px; }
   .rm-inner { padding: 28px 20px 100px; }
+}
+
+/* ===========================================================================
+   In-canvas control rail
+   ---------------------------------------------------------------------------
+   The left and right rails are gone; every control they held is behind one of
+   six icons on the edge of the 3D view. Opaque surfaces with the same hairline
+   the rails had — per the header of this file, nothing here floats and there is
+   no glass. Translucency would also fight the block, which is the one thing on
+   screen that must stay legible.
+   =========================================================================== */
+
+.scene-rail {
+  position: absolute; left: 0; top: 0; bottom: 0; z-index: 7;
+  width: 58px; flex: none;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 5px;
+  background: var(--s-2); border-right: 1px solid var(--line);
+  pointer-events: auto;
+}
+.rail-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 0 5px; cursor: pointer;
+  color: var(--ink-3); background: none;
+  border: 1px solid transparent; border-radius: var(--r);
+  transition: color .14s var(--ease), background .14s var(--ease),
+              border-color .14s var(--ease);
+}
+.rail-btn:hover { color: var(--ink); background: var(--s-3); }
+.rail-btn.on {
+  color: var(--accent); background: var(--accent-dim); border-color: var(--accent-line);
+}
+.rail-label {
+  /* 7px and near-zero tracking because the longest label, OPERATIONAL, has to
+     fit the strip whole — a clipped label is worse than a small one. */
+  font-family: var(--mono); font-size: 7px; letter-spacing: .01em;
+  text-transform: uppercase; line-height: 1; white-space: nowrap;
+}
+
+/* UNMOUNTED when closed, never hidden — so an orbit drag starts anywhere the
+   strip and this panel are not. */
+.rail-panel {
+  position: absolute; left: 58px; top: 0; bottom: 0; z-index: 7;
+  width: 302px;
+  display: flex; flex-direction: column;
+  overflow-y: auto; overflow-x: hidden;
+  background: var(--s-1); border-right: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  animation: railIn .16s var(--ease) both;
+}
+@keyframes railIn { from { opacity: 0; transform: translateX(-8px); } }
+@media (prefers-reduced-motion: reduce) { .rail-panel { animation: none; } }
+
+.rail-panel > .panel { flex: 1 0 auto; background: transparent; }
+.rail-panel .panel-body { overflow: visible; }
+/* the map panel carries grid placement from the old dashboard layout */
+.rail-panel .map-panel { grid-column: auto; grid-row: auto; }
+.rail-panel .map-body { height: auto; }
+
+/* one close affordance for all six groups, where a panel's own tools would sit */
+.rail-panel > .ibtn { position: absolute; top: 4px; right: 6px; z-index: 2; }
+
+/* --- the pinned point, in the canvas ------------------------------------ */
+/* The depth cursor belongs to the pin, not to a settings rail: it drives a
+   marker a few centimetres away in the same view. */
+.pinned-controls {
+  position: absolute; right: 10px; bottom: 44px; z-index: 7;
+  width: 224px; padding: 10px 11px 11px;
+  background: var(--s-1); border: 1px solid var(--line-2);
+  border-radius: var(--r); box-shadow: var(--shadow);
+  pointer-events: auto;
+  animation: rise .18s var(--ease) both;
+}
+.pinned-controls .pc-head {
+  display: flex; align-items: center; gap: 7px; margin-bottom: 7px;
+}
+.pinned-controls .pc-head .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--pin); flex: none;
+  box-shadow: 0 0 0 3px var(--pin-dim);
+}
+.pinned-controls .pc-head .spacer { flex: 1 1 auto; }
+.pinned-controls .pc-where {
+  font-family: var(--mono); font-size: 10px; color: var(--ink-3);
+  letter-spacing: .04em; margin-bottom: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.pinned-controls .srow {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px; margin-bottom: 5px;
+}
+.pinned-controls input[type=range] { width: 100%; margin: 2px 0 6px; }
+.pinned-controls .probe-read { display: flex; align-items: baseline; gap: 5px; min-height: 21px; }
+.pinned-controls .probe-read .big {
+  font-family: var(--mono); font-size: 17px; color: var(--pin);
+  font-variant-numeric: tabular-nums; line-height: 1.15;
+}
+.pinned-controls .probe-read .unit { font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
+.pinned-controls .probe-read .why { font-size: 10.5px; color: var(--ink-3); font-style: italic; }
+.pinned-controls .hint { margin-top: 5px; }
+
+/* --- app shell without rails -------------------------------------------- */
+.app:not(.page) { grid-template-columns: minmax(0, 1fr); }
+.center {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1.7fr) minmax(0, 1fr);
+}
+.scene-panel { grid-column: 1; grid-row: 1; }
+.charts {
+  grid-column: 1; grid-row: 2;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px; background: var(--line);
+}
+
+/* The scene host is the positioning context for the rail, so its overlays keep
+   clear of a 46px strip that is now always there. */
+/* Overlays clear the rail, and clear the open panel too — otherwise the ORBIT
+   hint and the section badge simply sit behind it and read as truncated. */
+.scene-host { --rail-w: 58px; }
+.scene-host.rail-open { --rail-w: 360px; }
+.scene-host .section-badge,
+.scene-host .scene-foot {
+  left: calc(var(--rail-w) + 10px);
+  transition: left .16s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene-host .section-badge, .scene-host .scene-foot { transition: none; }
+}
+
+@media (max-width: 1180px) {
+  .rail-panel { width: 268px; }
+  .scene-host.rail-open { --rail-w: 326px; }
+  .pinned-controls { width: 200px; }
 }

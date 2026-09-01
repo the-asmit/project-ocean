@@ -17,7 +17,7 @@ import { contourName, fmtStep } from './variableTerms.js'
 // Only ONE mount exists at a time — the rail unmounts its copy while the view
 // is expanded — so ids stay unique and the arrow-key handler is never doubled.
 
-function Slider({ label, value, min, max, step, format, onChange, hint }) {
+export function Slider({ label, value, min, max, step, format, onChange, hint }) {
   const id = `sl-${label.replace(/\s+/g, '-').toLowerCase()}`
   return (
     <div className="field">
@@ -36,7 +36,6 @@ function Slider({ label, value, min, max, step, format, onChange, hint }) {
 
 export default function SectionControls({ dataset, compact = false }) {
   const s = useVisualizationState()
-  const scale = useColorScale(dataset)
   const { bathyMaxM, depthCurve } = dataset.meta.bathymetry
   const maxDataM = dataset.meta.volume.maxDepthM
   const vol = dataset.meta.volume
@@ -76,19 +75,6 @@ export default function SectionControls({ dataset, compact = false }) {
     s.setPanelLayer('field')
   }
   const westLabel = wStop ? `${wStop.lon.toFixed(2)}°E` : 'off'
-
-  // The isovalue range comes from THIS tile's own data, not the fixed 8-31
-  // colorbar clamp — offering a value the tile does not contain would give an
-  // empty surface with no explanation.
-  const iso = useMemo(() => isoRange(dataset), [dataset])
-  const isoSwatch = scale.css(s.isoValue)
-  const stats = s.isoStats
-
-  // A new tile has a different range; an isovalue carried over from the old
-  // one could sit outside it entirely.
-  useEffect(() => {
-    if (s.isoValue < iso.lo || s.isoValue > iso.hi) s.setIsoValue(iso.start)
-  }, [iso])
 
   const sliceLabel = !stop
     ? 'off'
@@ -154,6 +140,38 @@ export default function SectionControls({ dataset, compact = false }) {
         </button>
       </div>
 
+    </Panel>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// The isosurface control, lifted out of the SECTION panel so the OPERATIONAL
+// group can host it beside the derived quantities it belongs with. The logic is
+// unchanged and still reads the same store fields and the same isoRange() — the
+// only thing that moved is which panel renders it.
+//
+// It is the one LIVE member of that group: the other three (cyclone heat
+// potential, thermocline, drift) are seated but not yet computed.
+// ---------------------------------------------------------------------------
+export function IsosurfaceControl({ dataset, compact = false }) {
+  const s = useVisualizationState()
+  const scale = useColorScale(dataset)
+  const maxDataM = dataset.meta.volume.maxDepthM
+  const iso = useMemo(() => isoRange(dataset), [dataset])
+  const isoSwatch = scale.css(s.isoValue)
+  const stats = s.isoStats
+  const hint = (text) => (compact ? undefined : text)
+
+  // A new tile has a different range; an isovalue carried over from the old
+  // one could sit outside it entirely. App.jsx corrects this in the same commit
+  // as the dataset — this is the second guard, for a tile that changed while
+  // this control was unmounted.
+  useEffect(() => {
+    if (s.isoValue < iso.lo || s.isoValue > iso.hi) s.setIsoValue(iso.start)
+  }, [iso])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
       {/* The isosurface: real derived structure, not a stylized layer, so it
           is badged DERIVED rather than STYLIZED or MOCK. */}
       <div className="field">
@@ -187,6 +205,6 @@ export default function SectionControls({ dataset, compact = false }) {
           }
         />
       )}
-    </Panel>
+    </>
   )
 }
