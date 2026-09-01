@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import Panel, { IconButton } from './Panel.jsx'
 import OceanScene from '../scene/OceanScene.jsx'
 import HUDLabel from '../interaction/HUDLabel.jsx'
@@ -9,19 +9,21 @@ import PinnedControls from '../interaction/PinnedControls.jsx'
 import TimelineControls from './TimelineControls.jsx'
 import { useCurrentsState, useCurrentsData } from '../currents/useCurrentsState.js'
 import { useVisualizationState } from '../state/useVisualizationState.js'
-import { IconHome } from './icons.jsx'
+import { IconExpand, IconCollapse, IconHome } from './icons.jsx'
 
 // The 3D view, and everything drawn over it.
 //
-// There is no fullscreen mode any more. It existed so the deep-dive could reach
-// controls the right rail was hiding, and it did that by mounting a SECOND copy
-// of the section controls — the last duplicate control path in the app. With
-// every control now inside the canvas and the canvas full-width, it had nothing
-// left to do, and removing it also disposes of the bug where the Scale panel
-// was unreachable while expanded.
+// FULLSCREEN carries no controls of its own. It used to mount a SECOND copy of
+// the section controls, because the right rail it covered was where they lived —
+// which made it the app's last duplicate control path, and left the Scale panel
+// unreachable while expanded. Every control is inside .scene-host now, so they
+// come along by construction and this toggle only changes how much room the
+// canvas gets. Only the 3D panel has it; the map is a map.
 export default function ScenePanel({ dataset, cameraRef }) {
   const hostRef = useRef()
   const goHome = useVisualizationState((s) => s.goHome)
+  const expanded = useVisualizationState((s) => s.sceneExpanded)
+  const setExpanded = useVisualizationState((s) => s.setSceneExpanded)
   const loading = useVisualizationState((s) => s.loading)
   const loadError = useVisualizationState((s) => s.loadError)
   // still needed by the on-canvas REAL CURRENTS chip; only the fullscreen
@@ -33,16 +35,37 @@ export default function ScenePanel({ dataset, cameraRef }) {
   const m = dataset.meta
   const isBox = String(m.region).startsWith('bbox:')
 
+  // Esc leaves fullscreen before it reaches App's clear-pin handler: capture
+  // phase, and it stops there. Leaving the view and dropping the pin on one
+  // keypress would be two undos for one gesture.
+  useEffect(() => {
+    if (!expanded) return undefined
+    const onKey = (e) => {
+      if (e.code === 'Escape') { e.stopPropagation(); setExpanded(false) }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [expanded, setExpanded])
+
   return (
     <Panel
-      className="scene-panel"
+      className={`scene-panel${expanded ? ' expanded' : ''}`}
       title="3D volume"
       sub={isBox
         ? `${m.regionLabel} · custom selection`
         : `${m.regionLabel} · ${m.bbox.lat_min}–${m.bbox.lat_max}°N ${m.bbox.lon_min}–${m.bbox.lon_max}°E`}
       bodyClass="flush"
       tools={
-        <IconButton label="Home view (H)" onClick={goHome}><IconHome size={13} /></IconButton>
+        <>
+          <IconButton label="Home view (H)" onClick={goHome}><IconHome size={13} /></IconButton>
+          <IconButton
+            label={expanded ? 'Exit full view (Esc)' : 'Full view'}
+            active={expanded}
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? <IconCollapse size={13} /> : <IconExpand size={13} />}
+          </IconButton>
+        </>
       }
     >
       {/* The rail's open panel is an overlay, so the canvas legends and hints

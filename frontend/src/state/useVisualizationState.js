@@ -74,6 +74,12 @@ export const useVisualizationState = create((set) => ({
   // of whatever geometry the other has left.
   westIndex: 0,             // 0 = no cut, else 1-based index into westStops
 
+  // Fullscreen for the 3D panel. It no longer mounts a second copy of
+  // anything — every control is inside the canvas now, so this only changes
+  // how much room the canvas gets.
+  sceneExpanded: false,
+  setSceneExpanded: (sceneExpanded) => set({ sceneExpanded }),
+
   // --- the in-canvas control rail ---------------------------------------
   // ONE open-panel mechanism for the whole app. Every control that used to live
   // in a rail is now behind one of these ids, and exactly one panel is open at

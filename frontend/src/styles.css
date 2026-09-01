@@ -456,6 +456,16 @@ kbd {
 .section-badge.void .d { color: var(--ink-2); }
 
 
+/* fullscreen deep-dive — the 3D panel only
+   grid-column/row auto so the panel leaves its cell rather than reserving a
+   hole under the overlay; the box-shadow is the scrim. Nothing is mounted for
+   this state: the rail, the pinned readout and the timeline are already
+   children of .scene-host and come with it. */
+.scene-panel.expanded {
+  position: fixed; inset: 0; z-index: 60; grid-column: auto; grid-row: auto;
+  border: none; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .5);
+}
+
 /* busy / error veil over the 3D panel ------------------------------------ */
 .scene-busy {
   position: absolute; inset: 0; z-index: 8;
