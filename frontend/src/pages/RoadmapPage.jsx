@@ -55,18 +55,22 @@ const GAPS = [
     n: 5,
     gap: 'No tools for intuitive, rapid understanding of complex 3D phenomena.',
     state: 'partial',
-    detail: 'Slicing, probing, the depth cursor, isosurfaces and animated streamlines are live. '
-      + 'The decision-relevant quantities a forecaster actually acts on — cyclone heat potential, '
-      + 'thermocline depth, drift, anomaly — are specified and seated in the interface, but their '
-      + 'computations are not yet wired.',
+    detail: 'Slicing, probing, the depth cursor, isosurfaces and animated streamlines are live, '
+      + 'and so is the flagship decision quantity: cyclone heat potential with the depth of the '
+      + '26 °C isotherm, drawn as a warped surface with the ~40 kJ/cm² intensification '
+      + 'contour on it. Thermocline depth, drift and anomaly are specified and seated in the '
+      + 'interface, but their computations are not yet wired.',
   },
 ]
 
 // OPERATIONAL_LAYER_SPEC.md §9's build order, against what exists.
 const OPS = [
-  { n: 1, name: 'D26 + TCHP', state: 'planned',
-    note: 'Depth of the 26 °C isotherm and the heat integral above it, with the ~40 kJ/cm² '
-      + 'cyclone-intensification contour. Toggle seated in the OPERATIONAL rail, compute not wired.' },
+  { n: 1, name: 'D26 + TCHP', state: 'live',
+    note: 'Shipped. Depth of the 26 °C isotherm as a warped surface inside the block, the '
+      + 'heat integral above it as a field on top, and the ~40 kJ/cm² contour drawn on both. '
+      + 'Computed in the browser from the loaded volume in 5-10 ms — no new fetch — and '
+      + 'verified against an independent Python implementation over the source NetCDF, which it '
+      + 'matches exactly on every statistic.' },
   { n: 2, name: 'Anomaly view', state: 'planned',
     note: 'Value minus the tile’s own mean at that depth, on a diverging ramp. Seated as the '
       + 'Normal/Anomaly control in the SCALE rail, disabled.' },
